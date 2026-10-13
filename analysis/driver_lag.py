@@ -27,9 +27,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from driver_activity import load_records
-from driver_regression import (DRIVER_COLS, build_base_design,
-                               load_driver_on_grid, _zscore)
+from driver_regression import load_records, build_base_design, load_driver_on_grid
 
 # representative subset: one driver per physical layer
 SUBSET      = ["Hp30", "SME", "IE", "E_KL", "Newell", "Bz", "SymH", "Pressure"]
@@ -42,14 +40,13 @@ CONTROLS = ["sin_m", "cos_m", "sin_2m", "cos_2m",
 
 
 def sweep_lags(records):
-    base, grid, years = build_base_design(records)
+    base, grid = build_base_design(records)
     lags = list(range(0, LAG_MAX_H + 1, LAG_STEP_H))
 
     rows = []
     for name in SUBSET:
         for lag in lags:
-            col = load_driver_on_grid(name, grid, years,
-                                      window_hours=WINDOW_H, lag_hours=lag)
+            col = load_driver_on_grid(name, grid, window_hours=WINDOW_H, lag_hours=lag)
             d = base[["y"] + CONTROLS].copy()
             d[name] = col
             d = d.dropna()

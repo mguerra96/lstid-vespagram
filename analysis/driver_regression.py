@@ -33,7 +33,10 @@ Outputs (in --out-dir):
   - driver_regression.csv         : coef, 95% CI, p-value, pseudo-R2, AUC per driver.
 """
 
+import sys
+import pickle
 import argparse
+import functools
 import datetime as dt
 from pathlib import Path
 
@@ -46,15 +49,20 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from driver_activity import GRID_MINUTES, ROLLING_HOURS, load_records, _round_to_grid
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from paths import FEATURES
 
-# All drivers are read from the single processed, quality-controlled feature
-# table (uniform 1-min cadence, 2015-2025, outliers cleaned). This replaces the
-# raw per-provider parquets, whose IMAGE files in particular contained spikes
-# (IE up to ~13000 nT vs the QC'd ~3400 nT) that corrupted IE's z-score and
-# sank its regression skill.
-FEATURES_PATH = Path(r"C:\Users\MarcoGuerra\Documents\PYTHON\lstid_forecasting"
-                     r"\data\processed\features.parquet")
+ROLLING_HOURS = 3    # trailing window for the driver average
+GRID_MINUTES  = 60   # cadence of the regular time grid LSTID ref_times are snapped to
+                     # (MATLAB reference used 30 min; occurrence and exposure are
+                     # evaluated on this same grid so their counts are directly
+                     # comparable, avoiding the ratio blow-ups a misaligned grid causes)
+
+# All drivers, in every analysis script, are read from the single processed,
+# quality-controlled feature table (uniform 1-min cadence, 2015-2025, outliers
+# cleaned). The raw per-provider parquets are not used: their IMAGE files in
+# particular contain spikes (IE up to ~13000 nT vs the QC'd ~3400 nT) that
+# corrupt IE's z-score and its activity bins.
 F107_COL = "f107"
 
 # regression driver name -> (feature-table column, transform). `transform` is
@@ -81,56 +89,70 @@ DRIVER_COLS = {
     "Bz":       ("imf_bz_gsm",      None),
 }
 
-_FEATURES_CACHE = None
+def load_records(pkl_path):
+    with open(pkl_path, "rb") as f:
+        records = pickle.load(f)
+    if not records:
+        raise ValueError(f"No LSTID records found in {pkl_path}")
+    return records
 
 
-def _features():
-    """Load (once, cached) the processed feature table, sorted by time."""
-    global _FEATURES_CACHE
-    if _FEATURES_CACHE is None:
-        _FEATURES_CACHE = pl.read_parquet(FEATURES_PATH).sort("time")
-    return _FEATURES_CACHE
+@functools.lru_cache(maxsize=None)
+def _feature(col):
+    """One column of the feature table with its time, sorted by time (read once)."""
+    return pl.read_parquet(FEATURES, columns=["time", col]).sort("time")
 
 
 def _load_driver_series(name):
     """One driver's timeseries from the feature table, transform applied,
     as a sorted polars frame ['time', <name>]."""
     col, transform = DRIVER_COLS[name]
-    df = _features().select(["time", col])
+    df = _feature(col)
     if transform == "abs":
         df = df.with_columns(pl.col(col).abs().alias(col))
     return df.rename({col: name})
 
 
+def _round_to_grid(times, minutes=GRID_MINUTES):
+    """Round datetimes to the nearest `minutes`, matching the MATLAB
+    reference's roundedtime (seconds zeroed, minutes rounded to nearest 30)."""
+    ts = pl.Series(times).cast(pl.Datetime("us")).dt.replace_time_zone("UTC")
+    epoch_min = ts.dt.epoch(time_unit="us") / 1_000_000 / 60
+    rounded_min = (epoch_min / minutes).round(0) * minutes
+    return (rounded_min * 60 * 1_000_000).cast(pl.Int64).cast(pl.Datetime("us")).dt.replace_time_zone("UTC")
+
+
 def _rolling_on_grid(series, col, grid, window_hours=ROLLING_HOURS):
     """`window_hours`-trailing rolling mean of series[col], sampled (nearest)
-    at each grid timestamp. Returns a numpy array aligned with `grid`."""
+    at each timestamp of `grid` (in any order; times without a time zone are
+    UTC, as in the catalogues). Returns a numpy array aligned with `grid`."""
     step     = series["time"][1] - series["time"][0]
     window_n = max(1, int(round(dt.timedelta(hours=window_hours) / step)))
     rolled   = series.with_columns(
         pl.col(col).rolling_mean(window_size=window_n, min_samples=1).alias("_roll")
     )
-    time_dtype = rolled["time"].dtype
-    grid_df = pl.DataFrame({"time": grid}).sort("time").with_columns(
-        pl.col("time").cast(time_dtype)
-    )
+    t = pl.Series("time", grid)
+    if t.dtype.time_zone is None:
+        t = t.dt.replace_time_zone("UTC")
+    grid_df = (pl.DataFrame({"time": t.cast(rolled["time"].dtype)})
+                 .with_row_index("_i").sort("time"))
     joined = grid_df.join_asof(rolled.select(["time", "_roll"]), on="time",
                               strategy="nearest")
-    return joined["_roll"].to_numpy()
+    return joined.sort("_i")["_roll"].to_numpy()
 
 
 def _f107_series():
     """F10.7 solar flux from the feature table, as a sorted frame ['time','f107']."""
-    return _features().select(["time", F107_COL])
+    return _feature(F107_COL)
 
 
 def build_base_design(records):
     """
     Build the per-hour outcome + confound-control table (everything EXCEPT the
-    driver columns), plus the grid and year list so callers can add driver
-    columns themselves (e.g. at different lags).
+    driver columns), plus the grid so callers can add driver columns
+    themselves (e.g. at different lags).
 
-    Returns (df, grid, years) where df has one row per grid hour with columns:
+    Returns (df, grid) where df has one row per grid hour with columns:
       time          - grid timestamp (UTC)
       y             - 1 if >=1 LSTID detected that hour, else 0
       sin_m,cos_m   - cyclic season, annual harmonic (month)
@@ -139,8 +161,6 @@ def build_base_design(records):
       sin_2h,cos_2h - cyclic local time, semidiurnal harmonic
       f107          - z-scored daily F10.7
     """
-    years = sorted({r["ref_time"].year for r in records})
-
     # regular hourly grid spanning the rounded ROI times (same as driver_activity)
     rounded = _round_to_grid([r["ref_time"] for r in records])
     t_min, t_max = rounded.min(), rounded.max()
@@ -170,10 +190,10 @@ def build_base_design(records):
     f107 = _rolling_on_grid(_f107_series(), F107_COL, grid, window_hours=1)
     df["f107"] = _zscore(f107)
 
-    return df, grid, years
+    return df, grid
 
 
-def load_driver_on_grid(name, grid, years, window_hours=ROLLING_HOURS, lag_hours=0):
+def load_driver_on_grid(name, grid, window_hours=ROLLING_HOURS, lag_hours=0):
     """
     z-scored `window_hours`-trailing mean of driver `name`, sampled on `grid`,
     optionally lagged by `lag_hours` (the grid slot at time t receives the
@@ -189,9 +209,9 @@ def load_driver_on_grid(name, grid, years, window_hours=ROLLING_HOURS, lag_hours
 def build_design(records):
     """Full design table: base (outcome + controls) plus every driver's
     z-scored 3h trailing mean column. See build_base_design for the controls."""
-    df, grid, years = build_base_design(records)
+    df, grid = build_base_design(records)
     for name in DRIVER_COLS:
-        df[name] = load_driver_on_grid(name, grid, years)
+        df[name] = load_driver_on_grid(name, grid)
     return df
 
 

@@ -27,10 +27,10 @@ from matplotlib.patches import Rectangle, Patch
 from matplotlib.lines import Line2D
 
 import inspect_confidence as ic
-from paths import FEATURES
 
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "analysis"))
+from driver_regression import _load_driver_series, _rolling_on_grid
 from catalogue_records import roi_trains   # ROI fronts merged into trains (compare.py rule)
 import pickle
 
@@ -41,12 +41,8 @@ ROI_COLOR = "#e07b00"
 
 
 def hp30_at(times):
-    f = (pl.read_parquet(FEATURES, columns=["time", "hp30"]).sort("time")
-         .with_columns(pl.col("hp30").rolling_mean(window_size=180, min_samples=1).alias("hp3h")))
-    tz = f["time"].dtype
-    q = pl.DataFrame({"time": times, "k": np.arange(len(times))}) \
-          .with_columns(pl.col("time").cast(pl.Datetime("us")).dt.replace_time_zone("UTC").cast(tz)).sort("time")
-    return q.join_asof(f.select("time", "hp3h"), on="time", strategy="nearest").sort("k")["hp3h"].to_numpy()
+    """Hp30, 3 h trailing mean, at each time."""
+    return _rolling_on_grid(_load_driver_series("Hp30"), "Hp30", times, window_hours=3)
 
 
 def classify(tr, roi):

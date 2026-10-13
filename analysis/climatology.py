@@ -8,10 +8,8 @@ Reads the combined lstid_rois.pkl produced by detect_roi.py's batch mode
 (one record per LSTID ROI, tagged with ref_time). Binning uses ref_time in UT.
 """
 
-import pickle
 import argparse
 import calendar
-import datetime as dt
 from pathlib import Path
 
 import numpy as np
@@ -21,12 +19,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
-# All driver overlays are read from the single processed, quality-controlled
-# feature table (uniform 1-min cadence, 2015-2025, outliers cleaned). This
-# replaces the raw per-provider parquets, whose IMAGE files contained spikes
-# (IE up to ~13000 nT vs the QC'd ~3400 nT) that corrupted the IE overlays.
-FEATURES_PATH = Path(r"C:\Users\MarcoGuerra\Documents\PYTHON\lstid_forecasting"
-                     r"\data\processed\features.parquet")
+# the driver overlays come from the quality-controlled feature table
+from driver_regression import load_records, _feature
 
 # overlay short name -> feature-table column
 OVERLAY_SOURCES = {
@@ -46,17 +40,6 @@ F107_COL = "f107"
 HP30_COL = "hp30"
 SZA_COL  = "sza"
 
-_FEATURES_CACHE = None
-
-
-def _features(columns=None):
-    """Load (once, cached) the processed feature table, sorted by time."""
-    global _FEATURES_CACHE
-    if _FEATURES_CACHE is None:
-        _FEATURES_CACHE = pl.read_parquet(FEATURES_PATH).sort("time")
-    return _FEATURES_CACHE.select(["time", *columns]) if columns else _FEATURES_CACHE
-
-
 def _minmax(a):
     """Scale an array to 0-1 by its own min/max (NaN-safe)."""
     a = np.asarray(a, dtype=float)
@@ -72,23 +55,11 @@ def _add_cell_grid(ax, n_rows, n_cols):
     ax.tick_params(which="minor", length=0)
 
 
-def load_records(pkl_path):
-    with open(pkl_path, "rb") as f:
-        records = pickle.load(f)
-    if not records:
-        raise ValueError(f"No LSTID ROI records found in {pkl_path}")
-    return records
-
-
-def load_index_month_hour(years, name):
-    """
-    Mean value of overlay variable `name` (one of OVERLAY_SOURCES) by
-    (month, hour), averaged over `years` and over all days/minutes within
-    each hour. Returns a (12, 24) array matching the LSTID month x hour
-    heatmap's cell layout.
-    """
-    col = OVERLAY_SOURCES[name]
-    df = _features([col]).with_columns(
+def _mean_month_hour(col, years):
+    """Mean of feature-table column `col` by (month, hour), averaged over
+    `years` and over all days/minutes within each hour. Returns a (12, 24)
+    array matching the LSTID month x hour heatmap's cell layout."""
+    df = _feature(col).with_columns(
         pl.col("time").dt.year().alias("year"),
         pl.col("time").dt.month().alias("month"),
         pl.col("time").dt.hour().alias("hour"),
@@ -102,29 +73,21 @@ def load_index_month_hour(years, name):
     return values
 
 
-def load_sza_month_hour(years):
-    """
-    Mean solar zenith angle [deg] by (month, hour) over `years`. Returns a
-    (12, 24) array. The SZA=90 deg contour of this grid is the mean solar
-    terminator (day/night boundary) as a function of month and UT hour.
-    """
-    df = _features([SZA_COL]).with_columns(
-        pl.col("time").dt.year().alias("year"),
-        pl.col("time").dt.month().alias("month"),
-        pl.col("time").dt.hour().alias("hour"),
-    ).filter(pl.col("year").is_in(years))
-    grid = (df.group_by(["month", "hour"]).agg(pl.col(SZA_COL).mean().alias("v"))
-              .sort(["month", "hour"]))
+def load_index_month_hour(years, name):
+    """Mean of overlay variable `name` (one of OVERLAY_SOURCES) by (month, hour)."""
+    return _mean_month_hour(OVERLAY_SOURCES[name], years)
 
-    values = np.full((12, 24), np.nan)
-    for m, h, v in grid.iter_rows():
-        values[m - 1, h] = v
-    return values
+
+def load_sza_month_hour(years):
+    """Mean solar zenith angle [deg] by (month, hour) over `years`. The SZA=90 deg
+    contour of this grid is the mean solar terminator (day/night boundary) as a
+    function of month and UT hour."""
+    return _mean_month_hour(SZA_COL, years)
 
 
 def load_f107_by_year(years):
     """Mean F10.7 solar flux per year. Returns a dict {year: mean}."""
-    df = _features([F107_COL]).with_columns(pl.col("time").dt.year().alias("year")) \
+    df = _feature(F107_COL).with_columns(pl.col("time").dt.year().alias("year")) \
                               .filter(pl.col("year").is_in(years))
     grid = df.group_by("year").agg(pl.col(F107_COL).mean().alias("v"))
     return dict(zip(grid["year"], grid["v"]))
@@ -133,7 +96,7 @@ def load_f107_by_year(years):
 def load_hp30_by_month(years):
     """Mean Hp30 per calendar month, averaged over `years`. Returns a
     length-12 array indexed [0]=Jan .. [11]=Dec."""
-    df = _features([HP30_COL]).with_columns(
+    df = _feature(HP30_COL).with_columns(
         pl.col("time").dt.year().alias("year"),
         pl.col("time").dt.month().alias("month"),
     ).filter(pl.col("year").is_in(years))
@@ -153,7 +116,7 @@ def load_index_by_hour(years, name):
     the IMAGE IU/IL electrojets.
     """
     col = {**OVERLAY_SOURCES, **HOURLY_SOURCES}[name]
-    df = _features([col]).with_columns(
+    df = _feature(col).with_columns(
         pl.col("time").dt.year().alias("year"),
         pl.col("time").dt.hour().alias("hour"),
     ).filter(pl.col("year").is_in(years))

@@ -7,7 +7,6 @@ function of geomagnetic/auroral activity level (SME, IE), using each ROI's
 (driver, parameter) combination, with activity binned into fixed-width bins.
 """
 
-import pickle
 import argparse
 from pathlib import Path
 
@@ -16,11 +15,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from driver_activity import DRIVERS, _load_driver_series, _bin_values, _cap_bounds
-import datetime as dt
-import polars as pl
+from driver_activity import DRIVERS, _cap_bounds
+from driver_regression import ROLLING_HOURS, load_records, _load_driver_series, _rolling_on_grid
 
-ROLLING_HOURS = 3
 BIN_WIDTH     = 200   # nT, fixed-width activity bins for the violin plots
 MIN_PER_BIN   = 5     # bins with fewer ROIs than this are dropped (too thin to plot)
 
@@ -31,36 +28,11 @@ PARAMETERS = {
 }
 
 
-def load_records(pkl_path):
-    with open(pkl_path, "rb") as f:
-        records = pickle.load(f)
-    if not records:
-        raise ValueError(f"No LSTID ROI records found in {pkl_path}")
-    return records
-
-
 def compute_driver_at_rois(records, name):
     """3h trailing mean of driver `name` at each ROI's ref_time (nearest
     sample, no grid snapping -- this is per-ROI, not an occurrence/exposure
     comparison, so there's no need to align to a shared regular grid)."""
-    years  = sorted({r["ref_time"].year for r in records})
-    _, _, col, _, _ = DRIVERS[name]
-    series = _load_driver_series(name, years)
-
-    step     = series["time"][1] - series["time"][0]
-    window_n = max(1, int(round(dt.timedelta(hours=ROLLING_HOURS) / step)))
-    rolled   = series.with_columns(
-        pl.col(col).rolling_mean(window_size=window_n, min_samples=1).alias("_roll")
-    )
-    time_dtype = rolled["time"].dtype
-
-    ref_times = pl.Series([r["ref_time"] for r in records]).cast(pl.Datetime("us")) \
-                  .dt.replace_time_zone("UTC")
-    q = (pl.DataFrame({"time": ref_times, "_order": np.arange(len(ref_times))})
-           .with_columns(pl.col("time").cast(time_dtype))
-           .sort("time"))
-    joined = q.join_asof(rolled.select(["time", "_roll"]), on="time", strategy="nearest")
-    return joined.sort("_order")["_roll"].to_numpy()
+    return _rolling_on_grid(_load_driver_series(name), name, [r["ref_time"] for r in records])
 
 
 def draw_violins(ax, groups, tick_labels, rotate=45, whisker_pct=(5, 95)):
@@ -119,7 +91,7 @@ def draw_violins(ax, groups, tick_labels, rotate=45, whisker_pct=(5, 95)):
 
 
 def plot_driver_characteristic(name, driver_values, records, param_key, out_dir):
-    _, _, col, _, cap = DRIVERS[name]
+    _, cap = DRIVERS[name]
     label, unit, scale = PARAMETERS[param_key]
 
     param_values = np.array([r[param_key] for r in records], dtype=float) * scale

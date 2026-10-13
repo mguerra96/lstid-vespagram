@@ -13,12 +13,11 @@ For each driver:
     activity level occurred at all, whether or not an LSTID was detected).
   - detection rate [%] = occurrence / exposure * 100 per bin.
 
-Drivers: Hp30, SymH (OMNI), IU/IL/IE (IMAGE), SMU/SML/SME (SuperMAG).
+Drivers: Hp30, SymH (OMNI), IU/IL/IE (IMAGE), SMU/SML/SME (SuperMAG), all from
+the quality-controlled feature table (see driver_regression.py).
 """
 
-import pickle
 import argparse
-import datetime as dt
 from pathlib import Path
 
 import numpy as np
@@ -27,61 +26,25 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-DATA_ROOT       = Path(r"C:\Users\MarcoGuerra\Documents\PYTHON\lstid_forecasting\data\raw")
-ROLLING_HOURS   = 3    # trailing window for the driver average
-GRID_MINUTES    = 60   # cadence of the regular time grid ROI ref_times are snapped to
-                        # (MATLAB reference used 30 min; occurrence and exposure here are
-                        # evaluated on this same grid so their counts are directly
-                        # comparable, avoiding the ratio blow-ups a misaligned grid causes)
+from driver_regression import (GRID_MINUTES, load_records, _round_to_grid,
+                               _load_driver_series, _rolling_on_grid)
 
-# name -> (folder, filename prefix, column, bin width, cap)
+# name (a key of driver_regression.DRIVER_COLS) -> (bin width, cap)
 # cap: values beyond this magnitude are clipped into a single overflow bin,
 # keeping the rare-extreme tail from spreading LSTID/exposure counts across
 # many near-empty bins. Either a single number (symmetric clip to [-cap, cap])
 # or a (low, high) tuple for an asymmetric clip (only one side truncated).
 DRIVERS = {
-    "Hp30": (DATA_ROOT / "gfz",      "gfz_hp30_",          "Hp30",  1,     (None, 9)),
-    "SymH": (DATA_ROOT / "omni",     "omni_hro_1min_",     "SYM_H", 10,    (-150, None)),
-    "IU":   (DATA_ROOT / "image",    "image_ie_",          "IU",    50,    500),
-    "IL":   (DATA_ROOT / "image",    "image_ie_",          "IL",    50,    1000),
-    "IE":   (DATA_ROOT / "image",    "image_ie_",          "IE",    50,    1000),
-    "SMU":  (DATA_ROOT / "supermag", "supermag_indices_",  "SMU",   50,    500),
-    "SML":  (DATA_ROOT / "supermag", "supermag_indices_",  "SML",   50,    1000),
-    "SME":  (DATA_ROOT / "supermag", "supermag_indices_",  "SME",   50,    1000),
-    "Bz":   (DATA_ROOT / "omni",     "omni_hro_1min_",     "BZ_GSM", 2,     20),
+    "Hp30": (1,  (None, 9)),
+    "SymH": (10, (-150, None)),
+    "IU":   (50, 500),
+    "IL":   (50, 1000),
+    "IE":   (50, 1000),
+    "SMU":  (50, 500),
+    "SML":  (50, 1000),
+    "SME":  (50, 1000),
+    "Bz":   (2,  20),
 }
-
-
-def load_records(pkl_path):
-    with open(pkl_path, "rb") as f:
-        records = pickle.load(f)
-    if not records:
-        raise ValueError(f"No LSTID ROI records found in {pkl_path}")
-    return records
-
-
-def _load_driver_series(name, years):
-    """Load one driver's full timeseries (all available years) as a sorted
-    polars DataFrame with columns ["time", name]."""
-    folder, prefix, col, _, _ = DRIVERS[name]
-    frames = []
-    for y in years:
-        path = folder / f"{prefix}{y}.parquet"
-        if not path.exists():
-            continue
-        frames.append(pl.read_parquet(path, columns=["time", col]))
-    if not frames:
-        raise FileNotFoundError(f"No '{name}' files found for years {years} in {folder}")
-    return pl.concat(frames).sort("time")
-
-
-def _round_to_grid(times, minutes=GRID_MINUTES):
-    """Round datetimes to the nearest `minutes`, matching the MATLAB
-    reference's roundedtime (seconds zeroed, minutes rounded to nearest 30)."""
-    ts = pl.Series(times).cast(pl.Datetime("us")).dt.replace_time_zone("UTC")
-    epoch_min = ts.dt.epoch(time_unit="us") / 1_000_000 / 60
-    rounded_min = (epoch_min / minutes).round(0) * minutes
-    return (rounded_min * 60 * 1_000_000).cast(pl.Int64).cast(pl.Datetime("us")).dt.replace_time_zone("UTC")
 
 
 def compute_occurrence_and_exposure(records, name):
@@ -101,36 +64,14 @@ def compute_occurrence_and_exposure(records, name):
                         "at all" baseline, i.e. how often each activity level
                         occurred whether or not an LSTID was detected)
     """
-    years  = sorted({r["ref_time"].year for r in records})
-    _, _, col, _, _ = DRIVERS[name]
-    series = _load_driver_series(name, years)
-
-    ref_times   = [r["ref_time"] for r in records]
-    rounded_occ = _round_to_grid(ref_times)
-
-    t_min, t_max = rounded_occ.min(), rounded_occ.max()
-    grid = pl.datetime_range(t_min, t_max, interval=f"{GRID_MINUTES}m",
+    rounded_occ = _round_to_grid([r["ref_time"] for r in records])
+    grid = pl.datetime_range(rounded_occ.min(), rounded_occ.max(), interval=f"{GRID_MINUTES}m",
                              time_zone="UTC", eager=True)
 
-    step     = series["time"][1] - series["time"][0]
-    window_n = max(1, int(round(dt.timedelta(hours=ROLLING_HOURS) / step)))
-    rolled   = series.with_columns(
-        pl.col(col).rolling_mean(window_size=window_n, min_samples=1).alias("_roll")
-    )
-    time_dtype = rolled["time"].dtype
-
-    grid_df = pl.DataFrame({"time": grid}).sort("time").with_columns(
-        pl.col("time").cast(time_dtype)
-    )
-    grid_vals = grid_df.join_asof(rolled.select(["time", "_roll"]), on="time",
-                                  strategy="nearest")
-    grid_map  = dict(zip(grid_vals["time"].cast(pl.Datetime("us")).dt.replace_time_zone("UTC"),
-                        grid_vals["_roll"]))
-
-    # dtype=float turns data gaps (None) into NaN; an object array breaks np.isnan
+    exposure_values = _rolling_on_grid(_load_driver_series(name), name, grid).astype(float)
+    grid_map        = dict(zip(grid, exposure_values))
     occ_values      = np.array([grid_map.get(t, np.nan) for t in rounded_occ], dtype=float)
     detected_values = np.array([grid_map.get(t, np.nan) for t in set(rounded_occ)], dtype=float)
-    exposure_values = grid_vals["_roll"].to_numpy().astype(float)
 
     return occ_values, detected_values, exposure_values
 
@@ -164,7 +105,7 @@ MIN_EXPOSURE = 5   # bins with fewer hourly exposure samples than this are dropp
 
 
 def plot_driver_activity(name, occ_values, detected_values, exposure_values, out_dir):
-    _, _, col, bin_width, cap = DRIVERS[name]
+    bin_width, cap = DRIVERS[name]
 
     occ_binned  = _bin_values(occ_values, bin_width, cap)
     det_binned  = _bin_values(detected_values, bin_width, cap)
