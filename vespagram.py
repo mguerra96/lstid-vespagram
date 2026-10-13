@@ -1078,13 +1078,23 @@ def _process_date(job):
         return cfg.input_date, [], [], f"{type(e).__name__}: {e}"
 
 
+def _write_table(rows, folder, name):
+    """Write records as <name>.parquet and, for readers without a parquet library,
+    as <name>.csv with each list column as values separated by spaces."""
+    df = pl.DataFrame(rows)
+    df.write_parquet(folder / f"{name}.parquet")
+    lists = [c for c, t in df.schema.items() if isinstance(t, pl.List)]
+    df.with_columns(pl.col(c).cast(pl.List(pl.String)).list.join(" ") for c in lists) \
+      .write_csv(folder / f"{name}.csv")
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Vespagram (slant-stack) LSTID detection.")
     parser.add_argument("dates", nargs="*", default=[str(VespaConfig.input_date)],
                         help="one or more selectors: YYYY, YYYY-MM or YYYY-MM-DD "
                              "(use 'all' for every grid)")
     parser.add_argument("--no-plot", action="store_true",
-                        help="skip figures and per-day CSVs; only write the parquet catalogue")
+                        help="skip figures and per-day CSVs; only write the catalogue")
     parser.add_argument("--workers", type=int, default=1)
     return parser.parse_args(argv)
 
@@ -1127,8 +1137,11 @@ def main(argv=None):
         # runs get their own file so they can never overwrite it
         tag = "" if args.dates == ["all"] else "_" + "_".join(args.dates)
         tag += "_partial" if failures else ""
-        pl.DataFrame(trains).write_parquet(base.out_dir / f"trains{tag}.parquet")
-        pl.DataFrame(dets).write_parquet(base.out_dir / f"detections{tag}.parquet")
+        # days finish in any order: sort, so that two builds give the same files
+        trains.sort(key=lambda r: (r["t_start"], r["date"]))
+        dets.sort(key=lambda d: (d["date"], d["train_id"], d["t_start"], d["array"]))
+        _write_table(trains, base.out_dir, f"trains{tag}")
+        _write_table(dets, base.out_dir, f"detections{tag}")
         print(f"Saved {len(trains)} LSTID trains ({len(dets)} detections) from "
               f"{len(dates) - len(failures)} days -> {base.out_dir}")
     print(f"Done in {time.time() - t0:.1f}s, {len(failures)} failed")

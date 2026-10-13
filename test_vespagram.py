@@ -3,8 +3,11 @@ test_vespagram.py
 
 Synthetic checks of detection and train linking: known wave fields are built on
 the same decimated grid the pipeline uses, band-passed, and run through
-vespagram.analyse. Run: python test_vespagram.py
+vespagram.analyse. Then checks of the rule that settles trains crossing midnight,
+on hand-made train records. Run: python test_vespagram.py (exit code = failures)
 """
+
+import datetime as dt
 
 import numpy as np
 
@@ -111,6 +114,45 @@ CASES = {
 }
 
 
+# ── trains crossing midnight (vespagram.resolve_day_boundaries) ────────────────
+
+D0, D1 = dt.date(2024, 1, 1), dt.date(2024, 1, 2)
+
+
+def rec(day, train_id, start_h, end_h, owned):
+    """A train record as one day's run reports it; hours count from 00 UT of D0."""
+    t0 = dt.datetime.combine(D0, dt.time())
+    return {"date": day, "train_id": train_id, "owned": owned,
+            "t_start": t0 + dt.timedelta(hours=start_h), "t_end": t0 + dt.timedelta(hours=end_h)}
+
+
+BOUNDARY_CASES = {
+    # name: (records of the two days, the (date, train_id) that must stay)
+    "same wave seen from both days: the owner's row stays": (
+        [rec(D0, 1, 22, 25, True), rec(D1, 1, 22, 25, False)], {(D0, 1)}),
+    "wave seen only by the day that does not own it: kept": (
+        [rec(D1, 1, 22.5, 25, False)], {(D1, 1)}),
+    "neither day owns its view of the wave: the longer view stays": (
+        [rec(D0, 1, 23, 26, False), rec(D1, 1, 20, 25, False)], {(D1, 1)}),
+    "each day owns a different version of the wave: the longer stays": (
+        [rec(D0, 1, 21, 24.5, True), rec(D1, 1, 23, 28, True)], {(D1, 1)}),
+    "two waves that overlap, each seen by both days: one row each": (
+        [rec(D0, 1, 20, 24.5, True), rec(D0, 2, 24, 28, False),
+         rec(D1, 1, 20, 24.5, False), rec(D1, 2, 24, 28, True)], {(D0, 1), (D1, 2)}),
+    "waves that do not cross midnight are left alone": (
+        [rec(D0, 1, 3, 6, True), rec(D0, 2, 10, 14, True), rec(D1, 1, 30, 33, True)],
+        {(D0, 1), (D0, 2), (D1, 1)}),
+}
+
+
+def boundary_result(records):
+    """(date, train_id) of the trains and of the detections that are kept."""
+    dets = [{"date": r["date"], "train_id": r["train_id"]} for r in records for _ in range(2)]
+    trains, dets = v.resolve_day_boundaries(records, dets)
+    ids = lambda rows: sorted({(r["date"], r["train_id"]) for r in rows})
+    return ids(trains), ids(dets), len(trains), len(dets)
+
+
 if __name__ == "__main__":
     n_fail = 0
     for name, (Z, check, *overrides) in CASES.items():
@@ -118,4 +160,11 @@ if __name__ == "__main__":
         ok = check(tr)
         n_fail += not ok
         print(f"{'PASS' if ok else 'FAIL':5s}  {name:48s} -> {describe(tr)}")
+    for name, (records, expected) in BOUNDARY_CASES.items():
+        kept, kept_dets, n_tr, n_det = boundary_result(records)
+        # one row per train, and exactly the detections of the kept trains
+        ok = kept == kept_dets == sorted(expected) and n_tr == len(expected) and n_det == 2 * n_tr
+        n_fail += not ok
+        print(f"{'PASS' if ok else 'FAIL':5s}  midnight: {name} -> kept {[(str(d), k) for d, k in kept]}")
     print(f"\n{n_fail} unexpected failure(s)")
+    raise SystemExit(n_fail)
