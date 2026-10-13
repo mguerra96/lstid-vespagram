@@ -830,7 +830,7 @@ def parse_args(argv=None):
     parser.add_argument("--debug", action="store_true",
                         help="add all intermediate diagnostic panels to the output figure")
     parser.add_argument("--no-plot", action="store_true",
-                        help="skip plotting entirely; only write lstid_rois.pkl (much faster "
+                        help="skip plotting entirely; only write the ROI pickle (much faster "
                              "for a parameter sweep)")
     parser.add_argument("--workers", type=int, default=4,
                         help="parallel worker processes for a batch (default: %(default)s; "
@@ -1035,8 +1035,11 @@ def main(argv=None):
 
     bar.close()
 
-    # combined pickle of every LSTID ROI's characteristics across the whole batch
-    pkl_path = out_dir / "lstid_rois.pkl"
+    # combined pickle of every LSTID ROI's characteristics across the whole batch;
+    # only a run over all days writes the main catalogue, a partial or failed run
+    # gets its own file so it can never overwrite it
+    tag = (f"_{args.date}" if args.date else "") + ("_partial" if n_fail else "")
+    pkl_path = out_dir / f"lstid_rois{tag}.pkl"
     with open(pkl_path, "wb") as f:
         pickle.dump(all_records, f)
     logging.info("Saved -> %s (%d ROIs)", pkl_path, len(all_records))

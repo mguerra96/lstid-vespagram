@@ -1122,9 +1122,10 @@ def main(argv=None):
           f"kept from the neighbouring day")
 
     if len(dates) > 1 or args.no_plot:
-        # only a full run writes the main catalogue; partial runs get their own
-        # file so a quick test can never overwrite it
+        # only a full run without failed days writes the main catalogue; partial
+        # runs get their own file so they can never overwrite it
         tag = "" if args.dates == ["all"] else "_" + "_".join(args.dates)
+        tag += "_partial" if failures else ""
         pl.DataFrame(trains).write_parquet(base.out_dir / f"trains{tag}.parquet")
         pl.DataFrame(dets).write_parquet(base.out_dir / f"detections{tag}.parquet")
         print(f"Saved {len(trains)} LSTID trains ({len(dets)} detections) from "

@@ -9,6 +9,7 @@ catalogue, so the text can be refreshed whenever the catalogue changes.
 
 import sys
 import json
+import pickle
 import datetime as dt
 from pathlib import Path
 
@@ -20,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT), str(ROOT / "analysis")]
 import vespagram as v
 from detect_roi import _read_grid, discover_dates
-from catalogue_records import roi_trains
+from catalogue_records import roi_trains, ROI_PKL
 import compare_climatology as cc
 
 OUT = Path(__file__).resolve().parent / "numbers.json"
@@ -45,7 +46,8 @@ def overlap_match(a_start, a_end, b_start, b_end):
 
 
 def main():
-    N = {}
+    # keep the sections written by the other scripts (hfint, published_roi, method_checks)
+    N = json.loads(OUT.read_text(encoding="utf-8")) if OUT.exists() else {}
     cfg = v.VespaConfig()
 
     # ── input grid ──
@@ -105,7 +107,7 @@ def main():
     hm_hit = overlap_match(hs, he, rs, re_)
     sel_r, sel_h = (ry >= 2021) & (ry <= 2024), (hy >= 2021) & (hy <= 2024)
     N["train_matching"] = {
-        "n_roi_fronts": 10296, "n_roi_trains": len(roi),
+        "n_roi_fronts": len(pickle.load(open(ROI_PKL, "rb"))), "n_roi_trains": len(roi),
         "roi_trains_matched_by_hm_pct": round(float(roi_hit.mean() * 100), 1),
         "hm_trains_matched_by_roi_pct": round(float(hm_hit.mean() * 100), 1),
         "2021-2024": {"roi_trains": int(sel_r.sum()), "hm_trains": int(sel_h.sum()),
