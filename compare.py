@@ -16,7 +16,6 @@ Outputs (results/comparison/):
       roi_only        a clear ROI train the vespagram does not class as LSTID
       vespa_only      a clear vespagram train with no ROI LSTID
       speed_disagree  matched train whose speeds differ by more than 1.5x
-      poleward        a vespagram poleward train (the ROI method has no direction)
 """
 
 import pickle
@@ -193,9 +192,8 @@ def pick_examples(tr, n=N_PER_CATEGORY, seed=0):
     agree         = roi.filter(pl.col("matched") & (ratio <= np.log(1.25))
                                & ~pl.col("date").is_in(list(any_unmatched | day_has(disagree))))
 
-    poleward      = ves.filter(pl.col("direction") == "poleward")
     cats = {"agree": agree, "roi_only": unmatched_roi, "vespa_only": unmatched_ves,
-            "speed_disagree": disagree, "poleward": poleward}
+            "speed_disagree": disagree}
     picks = {}
     for name, df in cats.items():
         days  = sorted(day_has(df))
@@ -206,41 +204,6 @@ def pick_examples(tr, n=N_PER_CATEGORY, seed=0):
         chosen_years = rng.choice(years, size=min(n, len(years)), replace=False)
         picks[name] = sorted(rng.choice([d for d in days if d.year == y])
                              for y in chosen_years)
-    return picks
-
-
-def pick_single_band(tr, seed=0):
-    """
-    Five days that each contain a single-band vespagram train, one per case,
-    for judging whether single-band trains are real:
-      confirmed   the ROI method found the same train
-      strong      unmatched, amplitude in the top quartile of single-band trains
-      typical     unmatched, amplitude near the single-band median
-      solar_min   unmatched, typical amplitude, in 2019-2020
-      poleward    a poleward single-band train
-    Days are drawn from different years where possible.
-    """
-    rng = np.random.default_rng(seed)
-    sb  = (tr.filter((pl.col("method") == "vespa") & (pl.col("geometry") == "single band"))
-             .with_columns(pl.col("date").dt.year().alias("year")))
-    q25, q50, q75 = (sb["amplitude"].quantile(q) for q in (0.25, 0.5, 0.75))
-    typical = pl.col("amplitude").is_between(0.8 * q50, 1.25 * q50)
-    eq_um   = (pl.col("direction") == "equatorward") & ~pl.col("matched")
-    cases = {
-        "confirmed": sb.filter((pl.col("direction") == "equatorward") & pl.col("matched")),
-        "strong":    sb.filter(eq_um & (pl.col("amplitude") >= q75)),
-        "typical":   sb.filter(eq_um & typical & ~pl.col("year").is_in([2019, 2020])),
-        "solar_min": sb.filter(eq_um & typical & pl.col("year").is_in([2019, 2020])),
-        "poleward":  sb.filter(pl.col("direction") == "poleward"),
-    }
-    picks, used_years = {}, set()
-    for name, df in cases.items():
-        pool = df.filter(~pl.col("year").is_in(list(used_years))) if name != "solar_min" else df
-        pool = pool if pool.height else df
-        row  = pool.row(int(rng.integers(pool.height)), named=True)
-        picks[name] = row["date"]
-        used_years.add(row["year"])
-    print(f"single-band amplitude quartiles [TECu]: {q25:.3f} / {q50:.3f} / {q75:.3f}")
     return picks
 
 
@@ -324,7 +287,7 @@ def main(argv=None):
     ap.add_argument("--days", nargs="*", help="also draw these YYYY-MM-DD days (category 'manual')")
     ap.add_argument("-n", type=int, default=N_PER_CATEGORY, help="examples per category")
     ap.add_argument("--categories", nargs="*",
-                    help="only draw these example categories (e.g. single_band); default: all")
+                    help="only draw these example categories (e.g. roi_only); default: all")
     args = ap.parse_args(argv)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -342,22 +305,16 @@ def main(argv=None):
           f"{dict(ves.group_by('direction').len().iter_rows())}")
 
     picks = pick_examples(tr, n=args.n)
-    sb    = pick_single_band(tr)
-    picks["single_band"] = list(sb.values())
     if args.days:
         picks["manual"] = [dt.date.fromisoformat(d) for d in args.days]
     if args.categories:
         picks = {k: v for k, v in picks.items() if k in args.categories}
-    case_of = {d: c for c, d in sb.items()}
     for cat, days in picks.items():
         (OUT_DIR / "examples" / cat).mkdir(parents=True, exist_ok=True)
         for d in days:
-            label = f"{cat} / {case_of[d]}" if cat == "single_band" else cat
-            name  = f"{case_of[d]}_{d}" if cat == "single_band" else str(d)
-            comparison_figure(d, label, roi, tr, OUT_DIR / "examples" / cat / f"{name}_compare.png")
+            comparison_figure(d, cat, roi, tr, OUT_DIR / "examples" / cat / f"{d}_compare.png")
             vespagram.run(vespagram.VespaConfig(input_date=d), do_plot=True)
-        print(f"{cat:15s} " + ", ".join(f"{case_of[d]}={d}" if cat == "single_band" else str(d)
-                                         for d in days))
+        print(f"{cat:15s} " + ", ".join(str(d) for d in days))
 
 
 if __name__ == "__main__":

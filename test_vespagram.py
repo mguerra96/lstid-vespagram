@@ -116,8 +116,6 @@ if __name__ == "__main__":
     for name, (Z, check, *overrides) in CASES.items():
         tr = run(Z, noise=0.02 if name == "noise only" else 0.005, **(overrides[0] if overrides else {}))
         ok = check(tr)
-        known = name.startswith("KNOWN LIMIT")
-        n_fail += not ok and not known
-        tag = "PASS" if ok else ("XFAIL" if known else "FAIL")
-        print(f"{tag:5s}  {name:48s} -> {describe(tr)}")
+        n_fail += not ok
+        print(f"{'PASS' if ok else 'FAIL':5s}  {name:48s} -> {describe(tr)}")
     print(f"\n{n_fail} unexpected failure(s)")

@@ -115,7 +115,6 @@ def _fit(y, X):
 
 def regress(base, drivers, y):
     rows = []
-    ok_all = np.isfinite(y)
     _, auc0 = _fit(y, base[CONTROLS])
     for name, col in drivers.items():
         ok = np.isfinite(col)
