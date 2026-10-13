@@ -101,7 +101,7 @@ and Hp30 less well, and latitudinal extent was the weakest predictor of all.
 | Column | Meaning |
 |---|---|
 | `speed_m_s`, `slowness` | propagation speed; slowness *p* > 0 means equatorward. Semblance-weighted median of the ridge slowness, from the full array if it saw the train, otherwise from the bands |
-| `speed_lo_m_s`, `speed_hi_m_s` | 16th–84th percentile range of the ridge speed over the train. In the injection test it contains the true speed 74 % of the time |
+| `speed_lo_m_s`, `speed_hi_m_s` | 16th–84th percentile range of the ridge speed over the train. In the injection test it contains the true speed 74 % of the time. For a `curved` train seen by the full array it also covers the same range of the band ridges: the full array fits one slope to a front that bends, so its own range is narrow but says nothing of the speeds along the front |
 | `period_min`, `wavelength_km` | wave period and wavelength |
 | `amplitude` | equivalent peak amplitude, √2 × RMS of the stacked beam over each detection, maximum over the train's detections [TECu] |
 | `semblance` | maximum semblance over the train's detections |
@@ -127,19 +127,30 @@ and Hp30 less well, and latitudinal extent was the weakest predictor of all.
 
 ## How to run
 
-The Python environment is `ionoring-test/iono-ring-env`. Keograms are read from
-`D:\pykeo\results\keo_mat`, and the drivers from
-`lstid_forecasting/data/processed/features.parquet`.
+Python 3.11 with the packages of `requirements.txt` (on the author's machine:
+`ionoring-test/iono-ring-env`). The input folders are set in `paths.py`; to use
+other folders set the environment variables `KEO_DIR` (daily keogram grids),
+`FEATURES` (1-min driver table) and `TEC_DIR` (daily TEC files, only for the
+coverage table and the empty-cell count).
 
 ```bash
-python test_vespagram.py                          # synthetic checks (must be 0 unexpected failures)
+python test_vespagram.py                          # synthetic checks and the midnight rule (exit code = failures)
 python injection_test.py --summary                # injection-recovery results (drop --summary to rerun, ~15 min)
 python vespagram.py 2024-05-11                    # one day: figure + CSV in results/vespagram/
-python vespagram.py all --no-plot --workers 12    # full catalogue (~30 min); only 'all' writes trains.parquet
-python analysis/catalogue_records.py              # records pickles for the analysis scripts (run after every catalogue run)
-python paper/method_checks.py                     # passband, slowness resolution, observation-density test -> paper/numbers.json
+python vespagram.py all --no-plot --workers 12    # full catalogue (~30 min): trains and detections, .parquet and .csv
+python rebuild.py                                 # the catalogue and everything derived from it, in order
+python rebuild.py --list                          # the steps of rebuild.py
+python daily_coverage.py                          # daily coverage table from the TEC files
 python paper/method_checks.py --tec-file paper/external/tec_2024-08-12.parquet   # also the empty keogram cells of that day
 ```
+
+Only a run over `all` days with no failed day writes `trains.parquet`; any other
+run writes `trains_<selector>.parquet` or `trains_partial.parquet` (the same
+holds for `detect_roi.py` and `lstid_rois.pkl`). The catalogue rows are sorted
+by start time. After a new catalogue, use `rebuild.py`: the later steps read the
+files of the earlier ones (`catalogue_records.py` → `compare_climatology.py` →
+`ratio_climatology.py` → `paper_numbers.py` → `validate_published.py` →
+`validate_hfint.py` → `method_checks.py` → `make_figures.py`).
 
 **Analysis** (`analysis/`). The scripts default to the vespagram high+medium
 records and write to `results/vespagram/climatology/`. Pass
@@ -166,8 +177,12 @@ the ROI catalogue.
   - `--random 40` instead draws random days.
 - `quiet_check.py`: quiet-time trains, comparing those found only by the
   vespagram with those also found by ROI.
-- `compare.py`: side-by-side ROI vs vespagram examples. It also defines the
-  front-to-train merge rule used for the ROI catalogue.
+- `compare.py`: side-by-side ROI vs vespagram examples.
+
+The rule that merges ROI fronts into trains (`TRAIN_GAP`, 60 min) and the rule
+that matches trains of two catalogues (`MATCH_TOL`, 15 min) are defined once, in
+`analysis/catalogue_records.py`. All drivers come from the quality-controlled
+feature table, through `analysis/driver_regression.py`.
 
 ## Injection test
 
@@ -217,7 +232,10 @@ packet is added after the arc-level detrending, so that filter is not tested.
 - **Simultaneous waves.** By definition there is one train at a time: a slow
   wave in the south and a fast one in the north at the same time are one
   "curved" train, and two simultaneous waves are one train whose speed is that of
-  the dominant one, with a wide speed interval.
+  the dominant one, with a wide speed interval. For a curved train `speed_m_s`
+  can be the speed of neither wave (500 m/s in the south and 1000 m/s in the
+  north read 1430 m/s in the synthetic test): use the interval and the
+  speed–latitude profile.
 - **Quiet-time agreement with ROI.** The vespagram finds about 1.1× ROI's LSTID
   hours in storms but about 3× in quiet conditions (high+medium). Quiet-time trains
   found only by the vespagram look like real but weaker LSTIDs: median amplitude

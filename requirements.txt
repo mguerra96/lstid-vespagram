@@ -1,0 +1,13 @@
+# Versions the catalogue and the figures were produced with (Python 3.11.9).
+numpy==2.4.6
+scipy==1.17.1
+polars==1.40.1
+pandas==3.0.3
+pyarrow==24.0.0
+matplotlib==3.10.9
+scikit-image==0.26.0
+tqdm==4.67.3
+statsmodels==0.14.6           # analysis/: driver regressions
+scikit-learn==1.9.0           # analysis/ (AUC) and detect_roi.py
+opencv-python-headless==4.13.0.92   # detect_roi.py only
+Cartopy==0.25.0               # paper/make_figures.py, Fig. 2 only
