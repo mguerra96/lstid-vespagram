@@ -38,11 +38,10 @@ from scipy.signal import savgol_coeffs, freqz, butter, sosfreqz
 ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT)]
 import vespagram as v
+from paths import FEATURES, TEC_DIR
 
 NUMBERS  = Path(__file__).resolve().parent / "numbers.json"
-FEATURES = Path(r"C:\Users\MarcoGuerra\Documents\PYTHON\lstid_forecasting\data\processed\features.parquet")
 COVERAGE = ROOT / "results/vespagram/daily_coverage.csv"
-TEC_DIR  = Path(r"D:\pykeo\results\tec_data")
 EMPTY_CSV = ROOT / "results/vespagram/empty_cells.csv"
 
 # pykeo settings that are not in VespaConfig
@@ -268,7 +267,7 @@ def main():
     ap.add_argument("--workers", type=int, default=12)
     args = ap.parse_args()
     cfg = v.VespaConfig()
-    N = json.loads(NUMBERS.read_text(encoding="utf-8"))
+    N = json.loads(NUMBERS.read_text(encoding="utf-8")) if NUMBERS.exists() else {}
     out = N.get("method_checks", {})
     out.update(passband=passband(cfg), resolution=resolution(cfg), density=density(), overlap=overlap())
     if args.empty_cells:

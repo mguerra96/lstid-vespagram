@@ -49,6 +49,7 @@ from scipy.signal import butter, sosfiltfilt, find_peaks
 from skimage.measure import label
 from geopy.distance import geodesic
 
+import paths
 from detect_roi import Config as RoiConfig, load_grid, discover_dates, SECONDS_PER_DAY
 
 
@@ -57,8 +58,8 @@ from detect_roi import Config as RoiConfig, load_grid, discover_dates, SECONDS_P
 @dataclass
 class VespaConfig:
     # ── Paths & date ──
-    keo_folder: Path = Path(r"D:\pykeo\results\keo_mat")
-    out_dir:    Path = Path("c:/Users/MarcoGuerra/Documents/PYTHON/roi-identification/results/vespagram")
+    keo_folder: Path = paths.KEO_DIR
+    out_dir:    Path = paths.ROOT / "results/vespagram"
     input_date: dt.date = dt.date(2015, 1, 7)
     longitude:  float = 17.5
     border_pad_hours: float = 12    # hours of the neighbouring days read on each side: long

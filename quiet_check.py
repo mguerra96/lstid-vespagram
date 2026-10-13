@@ -27,6 +27,7 @@ from matplotlib.patches import Rectangle, Patch
 from matplotlib.lines import Line2D
 
 import inspect_confidence as ic
+from paths import FEATURES
 
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "analysis"))
@@ -34,8 +35,6 @@ from catalogue_records import roi_trains   # ROI fronts merged into trains (comp
 import pickle
 
 OUT      = ROOT / "results/vespagram/quiet_check"
-FEATURES = (r"C:\Users\MarcoGuerra\Documents\PYTHON\lstid_forecasting"
-            r"\data\processed\features.parquet")
 HP30_MAX = 2.0
 TOL      = dt.timedelta(minutes=15)       # same matching tolerance as compare.py
 ROI_COLOR = "#e07b00"

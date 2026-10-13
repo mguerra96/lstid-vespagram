@@ -35,10 +35,10 @@ import numpy as np
 import polars as pl
 
 import vespagram as v
+from paths import FEATURES
 
 ROOT     = Path(__file__).parent
 OUT      = ROOT / "results/vespagram/injection"
-FEATURES = Path(r"C:\Users\MarcoGuerra\Documents\PYTHON\lstid_forecasting\data\processed\features.parquet")
 
 SPEEDS  = [350, 450, 600, 800, 1100, 1400]        # m/s, equatorward
 PERIODS = [40, 55, 70]                            # min

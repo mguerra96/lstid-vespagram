@@ -45,6 +45,8 @@ from sklearn.mixture import GaussianMixture
 from sklearn.linear_model import RANSACRegressor
 from geopy.distance import geodesic
 
+import paths
+
 
 # ── Configuration ───────────────────────────────────────────────────────────────
 
@@ -57,8 +59,8 @@ class Config:
     the current default grid is noted in each field's comment for reviewer context.
     """
     # ── Paths & date ──
-    keo_folder: Path = Path(r"D:\pykeo\results\keo_mat")
-    out_dir:    Path = Path("c:/Users/MarcoGuerra/Documents/PYTHON/roi-identification/results")
+    keo_folder: Path = paths.KEO_DIR
+    out_dir:    Path = paths.ROOT / "results"
     input_date: dt.date = dt.date(2015, 12, 27)
     longitude:    float = 17.5   # centre longitude of the keogram [deg]
     ref_latitude: float = 47.5   # reference latitude used to compute ROI ref_time [deg]

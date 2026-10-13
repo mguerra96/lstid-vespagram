@@ -12,13 +12,16 @@ A valid observation is a row with a detrended vertical TEC value.
   python paper/figures/tec_sample.py
 """
 
+import sys
 import datetime as dt
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 
-TEC_DIR = Path("D:/pykeo/results/tec_data")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from paths import TEC_DIR
+
 DATA    = Path(__file__).resolve().parent / "data"
 STEP    = dt.timedelta(days=7)
 MAP_DAYS = ["2015-06-15", "2025-06-15"]

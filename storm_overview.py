@@ -30,9 +30,8 @@ from matplotlib.patches import Patch
 import vespagram as v
 from detect_roi import discover_dates
 from inspect_confidence import draw_train, TIERS, ROOT
+from paths import FEATURES
 
-FEATURES = (r"C:\Users\MarcoGuerra\Documents\PYTHON\lstid_forecasting"
-            r"\data\processed\features.parquet")
 VMIN_SCALE = 0.06    # colour scale is max(this, 98th percentile of |X| in the day) [TECu]
 
 

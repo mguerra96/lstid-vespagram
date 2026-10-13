@@ -4,17 +4,17 @@ paper/make_figures.py
 Figures 1-6 of the Data Descriptor, written to paper/figures/figN.{pdf,png}.
 
 Inputs: the released catalogue (results/vespagram/trains.parquet, detections.parquet,
-lstid_hours_highmed.pkl), the keograms (D:/pykeo/results/keo_mat), the coverage
+lstid_hours_highmed.pkl), the keograms (KEO_DIR in paths.py: the archive, or a
+folder rebuilt from TEC files by paper/keogram_from_tec.py), the coverage
 table (results/vespagram/daily_coverage.csv), the validation numbers
 (paper/numbers.json, results/climatology_compare/ratio.csv), the driver series
-(lstid_forecasting features.parquet) and the cached summaries in
+(FEATURES in paths.py) and the cached summaries in
 paper/figures/data/ (tec_sample.py; monthly sunspot number from SILSO).
 
   python paper/make_figures.py            all figures
   python paper/make_figures.py 1 6        selected figures
 """
 
-import os
 import sys
 import json
 import pickle
@@ -37,11 +37,11 @@ ROOT = HERE.parent
 sys.path.insert(0, str(ROOT))
 import vespagram as v
 from detect_roi import Config as RoiConfig, load_grid
+from paths import FEATURES
 
 OUT      = HERE / "figures"
 DATA     = OUT / "data"
 VESPA    = ROOT / "results/vespagram"
-FEATURES = Path(r"C:\Users\MarcoGuerra\Documents\PYTHON\lstid_forecasting\data\processed\features.parquet")
 
 MM   = 1 / 25.4
 WIDE = 183 * MM                      # double-column width
@@ -52,8 +52,6 @@ HM_C, HF_C = "#222222", "#CC79A7"    # high+medium aggregate; HF-INT
 SYMH_C, SME_C = "#5b3f8c", "#b5532a"
 KEO_LIM = 0.15                       # TECu, band-passed keograms
 CFG = v.VespaConfig()
-# keogram grids: the archive, or a folder rebuilt from TEC files (paper/keogram_from_tec.py)
-KEO_DIR = Path(os.environ["KEO_DIR"]) if "KEO_DIR" in os.environ else CFG.keo_folder
 
 plt.rcParams.update({
     "font.family": "Arial", "font.size": 7, "axes.titlesize": 7, "axes.labelsize": 7,
@@ -166,7 +164,7 @@ def bandpassed(t0, t1):
     blocks, times = [], []
     day = t0.normalize()
     while day < t1:
-        X, lats, t = v.load_and_prepare(v.VespaConfig(input_date=day.date(), keo_folder=KEO_DIR))
+        X, lats, t = v.load_and_prepare(v.VespaConfig(input_date=day.date()))
         k = (t >= 0) & (t < 86400)
         blocks.append(X[:, k]); times.append(day + pd.to_timedelta(t[k], unit="s"))
         day += pd.Timedelta(days=1)
@@ -251,7 +249,7 @@ def vespa(ax, r, t0):
 def fig1():
     day = pd.Timestamp("2024-08-12")
     t0, t1 = day, day + pd.Timedelta(days=1)
-    cfg = v.VespaConfig(input_date=day.date(), keo_folder=KEO_DIR)
+    cfg = v.VespaConfig(input_date=day.date())
     Z, lats_raw, traw, _ = load_grid(RoiConfig(keo_folder=cfg.keo_folder, input_date=cfg.input_date,
                                                border_pad_hours=0))
     X, lats, t, results, *_ = v.detect(cfg)

@@ -19,8 +19,9 @@ from pathlib import Path
 import polars as pl
 
 HERE  = Path(__file__).resolve().parent
-PYKEO = Path(r"C:\Users\MarcoGuerra\Documents\PYTHON\pykeo\scripts")
 OUT   = HERE / "external/keo"
+sys.path.insert(0, str(HERE.parent))
+from paths import PYKEO
 sys.path.insert(0, str(PYKEO))
 from pykeo_lib.keogram import plot_keogram
 
