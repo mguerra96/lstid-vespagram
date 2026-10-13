@@ -43,7 +43,6 @@ from skimage.transform import downscale_local_mean
 from sklearn.preprocessing import minmax_scale
 from sklearn.mixture import GaussianMixture
 from sklearn.linear_model import RANSACRegressor
-from geopy.distance import geodesic
 
 import paths
 
@@ -180,6 +179,7 @@ def _json_safe(value):
 # ══════════════════════════════════════════════════════════════════════════════
 
 SECONDS_PER_DAY = 86400
+M_PER_DEG = 111_195.0   # along-meridian metres per degree of latitude (spherical Earth)
 
 
 def _read_grid(path):
@@ -547,7 +547,7 @@ def fit_lines(roi, matrix, lats, times_sec, cfg):
         start_time = t0_dt + dt.timedelta(seconds=int(times_sec[0]) + int(y.min() * sec_per_col))
         end_time   = t0_dt + dt.timedelta(seconds=int(times_sec[0]) + int(y.max() * sec_per_col))
         duration_s = (end_time - start_time).total_seconds()
-        distance_m = geodesic((start_lat, cfg.longitude), (end_lat, cfg.longitude)).meters
+        distance_m = abs(start_lat - end_lat) * M_PER_DEG
         speed      = distance_m / duration_s if duration_s > 0 else np.nan
 
         # ref_time: time at cfg.ref_latitude, used as a consistent cross-ROI timestamp

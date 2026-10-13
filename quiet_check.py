@@ -55,11 +55,11 @@ def roi_boxes(ax, day, fronts):
         ax.add_patch(Rectangle((a, lo), b - a, hi - lo, fill=False, ec=ROI_COLOR, lw=1.4, ls="--"))
 
 
-def sheet(rows, title, path, cache, fronts_by_day, ncol=3):
+def sheet(rows, title, path, fronts_by_day, ncol=3):
     nrow = int(np.ceil(len(rows) / ncol))
     fig, axes = plt.subplots(nrow, ncol, figsize=(6 * ncol, 3.2 * nrow), squeeze=False)
     for ax, r in zip(axes.flat, rows):
-        ic.panel(ax, r["date"], r["train_id"], cache)
+        ic.panel(ax, r["date"], r["train_id"])
         for dd in (-1, 0, 1):
             roi_boxes(ax, r["date"], fronts_by_day.get(r["date"] + dt.timedelta(days=dd), []))
         ax.set_title(ax.get_title(loc="left") + f"  ·  Hp30 {r['hp3h']:.1f}", fontsize=8, loc="left")
@@ -116,7 +116,6 @@ def main(argv=None):
     for r in fronts:
         by_day.setdefault(r["date"], []).append(r)
 
-    cache = {}
     if args.more:
         # one permutation: its first n trains are the original sheet, the next ones the extras
         sub = quiet.filter(~pl.col("roi_match"))
@@ -132,7 +131,7 @@ def main(argv=None):
             sheet(list(rows.iter_rows(named=True)),
                   f"Quiet time (Hp30 3 h < {HP30_MAX:g}), high+medium trains found by the vespagram "
                   f"only  —  extra set {k + 1}: {rows.height} more of {sub.height}.  Boxed = sampled train",
-                  OUT / f"sheet_vespa_only_{k + 2}.png", cache, by_day)
+                  OUT / f"sheet_vespa_only_{k + 2}.png", by_day)
         return
 
     for match, name, label in [(False, "vespa_only", "found by the vespagram only"),
@@ -142,7 +141,7 @@ def main(argv=None):
         sheet(list(rows.iter_rows(named=True)),
               f"Quiet time (Hp30 3 h < {HP30_MAX:g}), high+medium trains {label}  —  "
               f"{rows.height} random of {sub.height}.  Boxed = sampled train",
-              OUT / f"sheet_{name}.png", cache, by_day)
+              OUT / f"sheet_{name}.png", by_day)
 
 
 if __name__ == "__main__":

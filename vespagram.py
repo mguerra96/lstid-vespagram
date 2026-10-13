@@ -47,10 +47,9 @@ from matplotlib.patches import Rectangle
 from scipy.ndimage import gaussian_filter1d, uniform_filter1d, binary_dilation
 from scipy.signal import butter, sosfiltfilt, find_peaks
 from skimage.measure import label
-from geopy.distance import geodesic
 
 import paths
-from detect_roi import Config as RoiConfig, load_grid, discover_dates, SECONDS_PER_DAY
+from detect_roi import Config as RoiConfig, load_grid, discover_dates, SECONDS_PER_DAY, M_PER_DEG
 
 
 # ── Configuration ───────────────────────────────────────────────────────────────
@@ -61,7 +60,7 @@ class VespaConfig:
     keo_folder: Path = paths.KEO_DIR
     out_dir:    Path = paths.ROOT / "results/vespagram"
     input_date: dt.date = dt.date(2015, 1, 7)
-    longitude:  float = 17.5
+    longitude:  float = 17.5        # central longitude of the keogram (not used by the detector)
     border_pad_hours: float = 12    # hours of the neighbouring days read on each side: long
                                     # enough for the day that owns a midnight-crossing train
                                     # (midpoint inside it) to see the whole train
@@ -167,10 +166,9 @@ def bandpass(Z, dt_s, cfg):
 # STEP 3 — Slant stack
 # ══════════════════════════════════════════════════════════════════════════════
 
-def meridian_distance(lats, lat_ref, lon):
+def meridian_distance(lats, lat_ref):
     """Signed along-meridian distance of each latitude from lat_ref [m], north > 0."""
-    return np.array([np.sign(la - lat_ref) * geodesic((lat_ref, lon), (la, lon)).meters
-                     for la in lats])
+    return (np.asarray(lats, float) - lat_ref) * M_PER_DEG
 
 
 def shift_rows(X, shift):
@@ -225,9 +223,6 @@ def beam_at(X, dist, p, dt_s):
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 4 — Ridge picking: one detection per connected ridge per array
 # ══════════════════════════════════════════════════════════════════════════════
-
-M_PER_DEG = 111_195.0   # along-meridian metres per degree (for linking/drawing)
-
 
 def array_list(lats, cfg):
     """(lat_lo, lat_hi, is_full) for the full aperture and each sliding band."""
@@ -966,7 +961,7 @@ def analyse(X, lats, t, cfg):
     for lat_lo, lat_hi, is_full in array_list(lats, cfg):
         rows  = (lats >= lat_lo - 1e-6) & (lats <= lat_hi + 1e-6)
         Xa    = X[rows]
-        dist  = meridian_distance(lats[rows], 0.5 * (lat_lo + lat_hi), cfg.longitude)
+        dist  = meridian_distance(lats[rows], 0.5 * (lat_lo + lat_hi))
         S, A  = slant_stack(Xa, dist, p_grid, dt_s, cfg)
         ds    = pick_detections(S, A, Xa, dist, p_grid, t, lat_lo, lat_hi, is_full, cfg)
         r     = {"lat_lo": lat_lo, "lat_hi": lat_hi, "is_full": is_full, "S": S, "A": A,
@@ -1058,23 +1053,28 @@ def resolve_day_boundaries(trains, dets, tol=dt.timedelta(minutes=15)):
     return kept, [d for d in dets if (d["date"], d["train_id"]) in ids]
 
 
+def write_day(cfg, X, lats, t, results, dets, trains, members):
+    """The figure and the train CSV of one day (the output of detect), in cfg.out_dir."""
+    cfg.out_dir.mkdir(parents=True, exist_ok=True)
+    tr_rec = train_records(trains, cfg.input_date)
+    if tr_rec:
+        pl.DataFrame(tr_rec).select(TRAIN_COLS).write_csv(
+            cfg.out_dir / f"{cfg.input_date}_trains.csv")
+    plot(X, lats, t, results, dets, trains, members, cfg)
+
+
 def run(cfg, do_plot=True):
     """Detect one day; with do_plot also write the figure and a per-day train CSV.
     Returns (train records, detection records)."""
     t_start = time.time()
-    cfg.out_dir.mkdir(parents=True, exist_ok=True)
     X, lats, t, results, dets, trains, members = detect(cfg)
     t_detect = time.time() - t_start
 
-    tr_rec = train_records(trains, cfg.input_date)
     if do_plot:
-        if tr_rec:
-            pl.DataFrame(tr_rec).select(TRAIN_COLS).write_csv(
-                cfg.out_dir / f"{cfg.input_date}_trains.csv")
-        plot(X, lats, t, results, dets, trains, members, cfg)
+        write_day(cfg, X, lats, t, results, dets, trains, members)
     logging.info("%s: %d detections -> %d LSTID trains, detect %.2fs, total %.2fs",
                  cfg.input_date, len(dets), len(trains), t_detect, time.time() - t_start)
-    return tr_rec, detection_records(dets, cfg.input_date)
+    return train_records(trains, cfg.input_date), detection_records(dets, cfg.input_date)
 
 
 def _process_date(job):

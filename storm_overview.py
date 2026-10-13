@@ -117,7 +117,8 @@ def day_panel(fig, spec, day, info, features, out_daily):
     a.set_xticks(range(0, 25, 3))
     a.set_xlabel("time [h UT]", fontsize=8)
 
-    v.run(replace(cfg, out_dir=out_daily))         # standard full figure for the day
+    # standard full figure for the day
+    v.write_day(replace(cfg, out_dir=out_daily), X, lats, t, results, dets, trains, members)
     return h_all, h_hm
 
 

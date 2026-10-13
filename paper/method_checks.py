@@ -85,13 +85,13 @@ def resolution(cfg, period_min=55.0):
     p_fine = np.linspace(1 / 20000, cfg.max_slowness, 4000)
     out = {"period_min": period_min}
     for speed in (600, 1200):
-        dist_all = v.meridian_distance(lats, 47.5, cfg.longitude)
+        dist_all = v.meridian_distance(lats, 47.5)
         tau = t[None, :] + dist_all[:, None] / speed
         Z = np.sin(2 * np.pi * (tau - tc) / T) * np.exp(-((tau - tc) / (1.5 * T)) ** 2)
         X = v.bandpass(Z, cfg.time_step_s, cfg)
         for name, (lo, hi) in (("array_20deg", (37.5, 57.5)), ("subarray_10deg", (42.5, 52.5))):
             rows = (lats >= lo - 1e-6) & (lats <= hi + 1e-6)
-            dist = v.meridian_distance(lats[rows], 0.5 * (lo + hi), cfg.longitude)
+            dist = v.meridian_distance(lats[rows], 0.5 * (lo + hi))
             S, _ = v.slant_stack(X[rows], dist, p_fine, cfg.time_step_s, cfg)
             s = S[:, int(np.argmin(np.abs(t - tc)))]
             k = int(np.argmax(s))

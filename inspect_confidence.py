@@ -60,11 +60,9 @@ def draw_train(ax, tr, members, lats, cfg, boxed):
                       lw=0.6, alpha=0.95))
 
 
-def panel(ax, day, train_id, cache):
-    if day not in cache:
-        cache[day] = v.detect(v.VespaConfig(input_date=day))
-    X, lats, t, results, dets, trains, members = cache[day]
+def panel(ax, day, train_id):
     cfg = v.VespaConfig(input_date=day)
+    X, lats, t, results, dets, trains, members = v.detect(cfg)
     k = next(i for i, tr in enumerate(trains) if tr["train_id"] == train_id)
     tc = 0.5 * (trains[k]["t_start_s"] + trains[k]["t_end_s"]) / 3600
     t0 = min(max(tc - HALF_H, t[0] / 3600), t[-1] / 3600 - 2 * HALF_H)
@@ -81,11 +79,11 @@ def panel(ax, day, train_id, cache):
                  f"{' + full array' if tr['full_array'] else ''}", fontsize=8, loc="left")
 
 
-def sheet(tier, rows, n_total, path, cache):
+def sheet(tier, rows, n_total, path):
     nrow = int(np.ceil(len(rows) / NCOL))
     fig, axes = plt.subplots(nrow, NCOL, figsize=(6 * NCOL, 3.1 * nrow), squeeze=False)
     for ax, r in zip(axes.flat, rows):
-        panel(ax, r["date"], r["train_id"], cache)
+        panel(ax, r["date"], r["train_id"])
     for ax in axes.flat[len(rows):]:
         ax.axis("off")
     for ax in axes[:, 0]:
@@ -111,11 +109,10 @@ def main(argv=None):
 
     OUT.mkdir(parents=True, exist_ok=True)
     tr = pl.read_parquet(TRAINS)
-    cache = {}
     for tier in TIERS:
         sub = tr.filter(pl.col("confidence") == tier)
         rows = sub.sample(min(args.n, sub.height), seed=args.seed).sort("date", "train_id")
-        sheet(tier, list(rows.iter_rows(named=True)), sub.height, OUT / f"sheet_{tier}.png", cache)
+        sheet(tier, list(rows.iter_rows(named=True)), sub.height, OUT / f"sheet_{tier}.png")
 
 
 if __name__ == "__main__":

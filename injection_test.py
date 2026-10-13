@@ -77,7 +77,7 @@ def run_day(job):
     except Exception as e:
         return [], f"{day}: {type(e).__name__}: {e}"
     dt_s = t[1] - t[0]
-    dist = v.meridian_distance(lats, 47.5, cfg.longitude)
+    dist = v.meridian_distance(lats, 47.5)
     _, _, base, _ = v.analyse(X, lats, t, cfg)
     n_base = sum(1 for b in base if b["t_end_s"] > 0 and b["t_start_s"] < v.SECONDS_PER_DAY)
     out = []

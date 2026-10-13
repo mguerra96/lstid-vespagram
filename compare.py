@@ -225,7 +225,8 @@ def comparison_figure(day, category, roi, tr, path):
 
     # (b) vespagram-based — rerun detection for this day to draw the band fronts
     vcfg = vespagram.VespaConfig(input_date=day)
-    _, vlats, _, _, dets, vtrains, members = vespagram.detect(vcfg)
+    X, vlats, vtime, results, dets, vtrains, members = vespagram.detect(vcfg)
+    vespagram.write_day(vcfg, X, vlats, vtime, results, dets, vtrains, members)   # its standard figure
     ax = fig.add_subplot(gs[1], sharex=fig.axes[0])
     keogram(ax, f"(b) vespagram LSTID trains: {len(vtrains)}  "
                 "(↓ equatorward, ↑ poleward; solid = crest, dashed = trough)")
@@ -286,7 +287,6 @@ def main(argv=None):
         (OUT_DIR / "examples" / cat).mkdir(parents=True, exist_ok=True)
         for d in days:
             comparison_figure(d, cat, roi, tr, OUT_DIR / "examples" / cat / f"{d}_compare.png")
-            vespagram.run(vespagram.VespaConfig(input_date=d), do_plot=True)
         print(f"{cat:15s} " + ", ".join(str(d) for d in days))
 
 
