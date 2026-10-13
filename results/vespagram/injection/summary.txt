@@ -1,0 +1,98 @@
+INJECTION-RECOVERY TEST OF THE VESPAGRAM DETECTOR
+
+What was done
+  A wave of known speed, period and amplitude is added to the keogram of a real quiet day,
+  and the detector is run exactly as for the catalogue. Comparing what the detector reports
+  with what was put in shows how weak a wave can be and still be found, and how accurate
+  the catalogued speed, period and amplitude are.
+  Wave: an equatorward sine packet under a Gaussian envelope (1.5 periods half-width), one per run,
+    centred at a random time between 04 and 20 UT.
+  Speeds [350, 450, 600, 800, 1100, 1400] m/s; periods [40, 55, 70] min; peak amplitudes [0.01, 0.015, 0.02, 0.03, 0.05, 0.1] TECu;
+    over the full array (37.5-57.5 N) or confined to the south (37.5-50 N); 12 waves per combination.
+  Quiet days: no catalogued train and daily-mean Hp30 < 1.5, spread evenly over 2015-2025.
+  A wave counts as detected when a catalogued train overlaps it in time.
+
+How to read the numbers
+  Section 1: fraction of the injected waves that were detected (1.00 = all of them).
+  'Recovered / true': catalogued value divided by injected value (1.000 = exact, 0.95 = 5% too low).
+  '16-84%': the range that holds the central 68% of the cases, i.e. the typical scatter.
+  '|error| > 20%': fraction of waves whose catalogued speed is off by more than 20%.
+
+Limits
+  Single planar waves at constant speed, on quiet days only. The wave is added after the
+  arc-level detrending, so the loss of long periods in that filter is not tested here.
+
+2592 injections into 132 quiet days; trains on those days without any injection: 3
+
+1. Share of injected waves detected (any confidence), full latitudinal extent: amplitude [TECu] x speed [m/s]
+   amp / speed    350    450    600    800   1100   1400
+          0.01   0.08   0.31   0.08   0.08   0.08   0.03
+         0.015   0.28   0.31   0.44   0.39   0.22   0.25
+          0.02   0.72   0.56   0.61   0.72   0.53   0.44
+          0.03   0.83   0.83   0.94   0.81   0.75   0.53
+          0.05   0.97   0.97   1.00   1.00   0.94   0.67
+           0.1   1.00   1.00   1.00   1.00   1.00   0.92
+
+   detected with high or medium confidence
+   amp / speed    350    450    600    800   1100   1400
+          0.01   0.03   0.03   0.06   0.03   0.00   0.00
+         0.015   0.08   0.08   0.31   0.17   0.03   0.14
+          0.02   0.25   0.31   0.36   0.44   0.31   0.19
+          0.03   0.61   0.69   0.72   0.56   0.56   0.42
+          0.05   0.94   0.89   0.97   0.94   0.83   0.64
+           0.1   1.00   1.00   1.00   0.94   1.00   0.92
+
+   detected (any confidence): amplitude x period [min]
+  amp / period     40     55     70
+          0.01   0.07   0.17   0.10
+         0.015   0.14   0.39   0.42
+          0.02   0.51   0.60   0.68
+          0.03   0.65   0.89   0.81
+          0.05   0.92   0.88   0.99
+           0.1   1.00   0.97   0.99
+
+   detected (any confidence), waves confined to 37.5-50 N
+   amp / speed    350    450    600    800   1100   1400
+          0.01   0.00   0.03   0.14   0.08   0.00   0.00
+         0.015   0.25   0.14   0.22   0.19   0.11   0.14
+          0.02   0.36   0.42   0.47   0.44   0.22   0.33
+          0.03   0.64   0.81   0.75   0.64   0.78   0.58
+          0.05   0.81   0.89   0.89   0.92   0.81   0.78
+           0.1   0.94   1.00   1.00   1.00   0.92   0.86
+
+2. Recovered / true speed of the detected full-extent waves
+   high                 n= 492  median 1.002  16-84% 0.963..1.040  |error| > 20%: 0.02
+   medium               n= 136  median 0.991  16-84% 0.930..1.062  |error| > 20%: 0.15
+   low                  n= 175  median 0.934  16-84% 0.763..1.061  |error| > 20%: 0.26
+   full-array detection n= 607  median 0.999  16-84% 0.960..1.036  |error| > 20%: 0.01
+   sub-arrays only      n= 196  median 0.942  16-84% 0.738..1.119  |error| > 20%: 0.34
+     350 m/s, amp>=0.03 n= 101  median 1.000  16-84% 0.983..1.018  |error| > 20%: 0.00
+     450 m/s, amp>=0.03 n= 101  median 0.999  16-84% 0.961..1.021  |error| > 20%: 0.03
+     600 m/s, amp>=0.03 n= 106  median 0.998  16-84% 0.961..1.031  |error| > 20%: 0.03
+     800 m/s, amp>=0.03 n= 101  median 0.999  16-84% 0.952..1.051  |error| > 20%: 0.04
+    1100 m/s, amp>=0.03 n=  97  median 1.001  16-84% 0.931..1.056  |error| > 20%: 0.03
+    1400 m/s, amp>=0.03 n=  76  median 0.991  16-84% 0.908..1.033  |error| > 20%: 0.04
+
+3. Share of detected waves whose true speed lies inside [speed_lo_m_s, speed_hi_m_s] (a 16-84% range: expect 0.68)
+   all                  n=1471  inside 0.74   median half-width  9.3%   median |error|  4.5%
+   high                 n= 897  inside 0.78   median half-width  7.1%   median |error|  3.3%
+   medium               n= 244  inside 0.73   median half-width  9.2%   median |error|  4.6%
+   low                  n= 330  inside 0.64   median half-width 19.3%   median |error| 11.6%
+   full-array detection n= 774  inside 0.72   median half-width  4.8%   median |error|  2.5%
+   sub-arrays only      n= 697  inside 0.76   median half-width 18.5%   median |error|  8.2%
+
+4. Period and amplitude of the detected full-extent waves (recovered / injected, median)
+   T = 40 min: period 1.000   amplitude, waves >= 0.05 TECu: 0.77
+   T = 55 min: period 0.982   amplitude, waves >= 0.05 TECu: 0.81
+   T = 70 min: period 0.971   amplitude, waves >= 0.05 TECu: 0.82
+
+5. Confidence of the detected full-extent waves by injected amplitude
+   0.010 TECu: n=  24  high 0.04  medium 0.17  low 0.79   median score 0.23
+   0.015 TECu: n=  68  high 0.16  medium 0.26  low 0.57   median score 0.26
+   0.020 TECu: n= 129  high 0.27  medium 0.25  low 0.48   median score 0.32
+   0.030 TECu: n= 169  high 0.57  medium 0.18  low 0.24   median score 0.47
+   0.050 TECu: n= 200  high 0.81  medium 0.14  low 0.06   median score 0.60
+   0.100 TECu: n= 213  high 0.88  medium 0.11  low 0.01   median score 0.73
+
+6. Waves confined to 37.5-50 N, amp >= 0.03 TECu: n=540, median catalogued northern edge 52.5 N, high confidence 0.71, speed n= 540  median 0.988  16-84% 0.871..1.069  |error| > 20%: 0.11
+   planar full-extent waves (amp >= 0.03 TECu) labelled curved: 0.14

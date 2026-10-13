@@ -1,0 +1,26 @@
+__pycache__/
+.claude/
+
+# outputs, rebuilt by the scripts (see rebuild.py); the injection results stay
+/results/*
+!/results/vespagram/
+/results/vespagram/*
+!/results/vespagram/injection/
+/paper/figures/fig*
+/paper/numbers.json
+/paper/external/keo/
+
+# large input, released on Zenodo with the data (over GitHub's 100 MB limit)
+/paper/external/tec_*.parquet
+
+# downloads the code does not read
+/paper/external/*.zip
+/paper/external/*.pdf
+/paper/external/*.mat
+/paper/external/features.csv
+
+# manuscript: not part of the code release
+/CLAUDE.md
+/paper/manuscript.*
+/paper/build.py
+/paper/OPEN_ITEMS.md
