@@ -620,9 +620,10 @@ def summarize_train(members, cfg):
     """
     One record per train. Speed comes from the full aperture when it saw the
     train (best resolution), otherwise from the bands; speed_lo/speed_hi are the
-    16th-84th percentile range of the ridge speed over the train (_train_slowness). The bands give a speed-vs-
-    latitude profile, summarised by speed_ratio = fastest / slowest band, and a
-    descriptive geometry flag:
+    16th-84th percentile range of the ridge speed over the train (_train_slowness),
+    widened to that of the bands for a curved train seen by the full aperture.
+    The bands give a speed-vs-latitude profile, summarised by speed_ratio =
+    fastest / slowest band, and a descriptive geometry flag:
       planar      band speeds within curved_speed_ratio of each other
       curved      band speeds differ by more (fronts bend with latitude)
       single band only one band saw it (latitude-confined)
@@ -655,6 +656,13 @@ def summarize_train(members, cfg):
     # evidence that the train exists, so it must not turn 'single band' into planar
     geometry = ("single band" if len(prof_lat) <= 1 and not full
                 else "curved" if ratio > cfg.curved_speed_ratio else "planar")
+    if geometry == "curved" and full:
+        # the full array fits one slope to a front that bends: its ridge is sharp,
+        # but it says nothing of the speeds along the front (a wave at 500 m/s in
+        # the south and 1000 m/s in the north read 1430 m/s, interval 1380-1490).
+        # So the interval also covers the 16th-84th percentile range of the bands.
+        _, b_lo, b_hi = _train_slowness(picked)
+        p_lo, p_hi = min(p_lo, b_lo), max(p_hi, b_hi)
 
     ext = bands or full
     semblance = max(d["semblance"] for d in members)

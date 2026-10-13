@@ -56,7 +56,8 @@ def run(Z, noise=0.005, **overrides):
 
 def describe(trains):
     return "; ".join(f"{t['t_start_s'] / 3600:.1f}-{t['t_end_s'] / 3600:.1f}h "
-                     f"{t['direction'][:3]} {t['speed_m_s']:.0f} m/s {t['period_s'] / 60:.0f} min "
+                     f"{t['direction'][:3]} {t['speed_m_s']:.0f} m/s "
+                     f"[{t['speed_lo_m_s']:.0f}-{t['speed_hi_m_s']:.0f}] {t['period_s'] / 60:.0f} min "
                      f"lat {t['lat_lo']}-{t['lat_hi']} {t['geometry']} {t['confidence']} "
                      f"(bands {t['n_bands_picked']}/{t['n_bands']})" for t in trains) or "none"
 
@@ -69,7 +70,8 @@ CASES = {
                    and tr[0]["geometry"] == "planar" and tr[0]["confidence"] == "high"),
     "curved 400 N -> 1000 S": (
         packet(12 * 3600, 3600, 0.05, curved(400, 1000)),
-        lambda tr: len(tr) == 1 and tr[0]["geometry"] == "curved"),
+        lambda tr: len(tr) == 1 and tr[0]["geometry"] == "curved"
+                   and tr[0]["speed_lo_m_s"] <= 600 and tr[0]["speed_hi_m_s"] >= 800),
     "poleward 500 m/s (dropped: equatorward-only catalogue)": (
         packet(12 * 3600, 3600, 0.05, plane(-500)),
         lambda tr: len(tr) == 0),
@@ -101,7 +103,10 @@ CASES = {
     "500 S-half + 1000 N-half: one curved train": (
         packet(12 * 3600, 3600, 0.05, plane(500), lat_mask=lambda la: la < 47.5) +
         packet(12 * 3600 + 1200, 3600, 0.05, plane(1000), lat_mask=lambda la: la >= 47.5),
-        lambda tr: len(tr) == 1 and tr[0]["geometry"] == "curved"),
+        # no single speed describes it (the full array reads about 1430 m/s): the
+        # speed interval must reach both waves
+        lambda tr: len(tr) == 1 and tr[0]["geometry"] == "curved"
+                   and tr[0]["speed_lo_m_s"] <= 550 and tr[0]["speed_hi_m_s"] >= 1000),
     # near-vertical front (2500 m/s) tilted poleward in the south half and
     # equatorward in the north half: never one train mixing both directions
     "mixed direction, 2500 m/s S-half poleward + N-half equatorward": (
