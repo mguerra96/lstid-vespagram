@@ -5,7 +5,7 @@ Compare the ROI-based LSTID catalogue (detect_roi.py -> lstid_rois.pkl) with the
 vespagram-based one (vespagram.py -> trains.parquet).
 
 The ROI method reports one record per front, so its fronts are merged into WAVE
-TRAINS (intervals closer than TRAIN_GAP). The vespagram catalogue already is one
+TRAINS (catalogue_records.roi_trains). The vespagram catalogue already is one
 record per train. Trains from the two methods are matched when they overlap in time.
 
 Outputs (results/comparison/):
@@ -18,6 +18,7 @@ Outputs (results/comparison/):
       speed_disagree  matched train whose speeds differ by more than 1.5x
 """
 
+import sys
 import pickle
 import argparse
 import datetime as dt
@@ -34,12 +35,11 @@ import detect_roi
 import vespagram
 
 ROOT      = Path(__file__).parent
-ROI_PKL   = ROOT / "results/roi/lstid_rois.pkl"
-VESPA_PQ  = ROOT / "results/vespagram/trains.parquet"
+sys.path.insert(0, str(ROOT / "analysis"))
+from catalogue_records import roi_trains, MATCH_TOL, ROI_PKL, VESPA_PQ
+
 OUT_DIR   = ROOT / "results/comparison"
 
-TRAIN_GAP     = dt.timedelta(minutes=60)   # merge LSTID intervals closer than this
-MATCH_TOL     = dt.timedelta(minutes=15)   # trains match if they overlap within this
 SPEED_RATIO   = 1.5                        # matched but |log ratio| above -> disagree
 N_PER_CATEGORY = 5
 
@@ -60,33 +60,6 @@ def load_vespa():
 
 # ── Trains and matching ─────────────────────────────────────────────────────────
 
-def build_trains(starts, ends, speeds, periods, method):
-    """Merge intervals into trains (gap < TRAIN_GAP). Trains are kept on the
-    global timeline so a train crossing midnight is one train; it is assigned
-    to the day holding its midpoint."""
-    order  = np.argsort(starts)
-    trains = []
-    for i in order:
-        s, e = starts[i], ends[i]
-        if trains and s <= trains[-1]["end"] + TRAIN_GAP:
-            tr = trains[-1]
-            tr["end"] = max(tr["end"], e)
-            tr["speeds"].append(speeds[i]); tr["periods"].append(periods[i])
-            tr["n"] += 1
-        else:
-            trains.append({"start": s, "end": e, "speeds": [speeds[i]],
-                           "periods": [periods[i]], "n": 1})
-    return [{"method":     method,
-             "start":      tr["start"],
-             "end":        tr["end"],
-             "date":       (tr["start"] + (tr["end"] - tr["start"]) / 2).date(),
-             "duration_h": (tr["end"] - tr["start"]).total_seconds() / 3600,
-             "speed":      float(np.nanmedian(tr["speeds"])),
-             "period_min": float(np.nanmedian(tr["periods"])),
-             "n_members":  tr["n"]}
-            for tr in trains]
-
-
 def match(a, b):
     """For each train in a, the index of the most-overlapping train in b (or -1)."""
     b_start = np.array([t["start"] for t in b])
@@ -99,13 +72,13 @@ def match(a, b):
     return out
 
 
-def trains_table(roi, vespa):
-    roi_tr = build_trains(roi["start_time"].to_list(), roi["end_time"].to_list(),
-                          roi["speed_m_s"].to_numpy(), (roi["period_s"] / 60).to_numpy(), "roi")
-    for t in roi_tr:
-        t["direction"] = None                 # the ROI speed is unsigned
-        t["geometry"]  = None
-        t["amplitude"] = None
+def trains_table(vespa):
+    roi_tr = [{"method": "roi", "start": t["start_time"], "end": t["end_time"], "date": t["date"],
+               "duration_h": t["duration_h"], "speed": t["speed_m_s"],
+               "period_min": t["period_s"] / 60, "n_members": t["n_fronts"],
+               "direction": None,             # the ROI speed is unsigned
+               "geometry": None, "amplitude": None}
+              for t in roi_trains()]
     ves_tr = [{"method": "vespa", "start": r["t_start"], "end": r["t_end"], "date": r["date"],
                "duration_h": (r["t_end"] - r["t_start"]).total_seconds() / 3600,
                "speed": r["speed_m_s"], "period_min": r["period_min"],
@@ -292,7 +265,7 @@ def main(argv=None):
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     roi, vespa = load_roi(), load_vespa()
-    tr = trains_table(roi, vespa)
+    tr = trains_table(vespa)
     tr.write_parquet(OUT_DIR / "trains.parquet")
     summary_figure(tr, OUT_DIR / "summary.png")
 

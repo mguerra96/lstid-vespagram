@@ -28,14 +28,13 @@ import numpy as np
 import polars as pl
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
-from paper_numbers import overlap_match
+sys.path[:0] = [str(ROOT / "analysis")]
+from catalogue_records import overlap_match, MATCH_TOL as TOL
 
 HFINT = Path(__file__).resolve().parent / "external/hfint"
 NUMBERS = Path(__file__).resolve().parent / "numbers.json"
 YEARS = (2015, 2025)
 SOUTH = (150, 220)                  # azimuth range of auroral (southward) events, as Segarra et al. 2025
-TOL = dt.timedelta(minutes=15)
 ONSET_LAG = dt.timedelta(minutes=60)
 SHIFTS = [d for k in range(3, 33, 3) for d in (k, -k)]   # +-3..30 days, 20 shifts
 TIERS = {"high": ["high"], "medium": ["medium"], "low": ["low"],

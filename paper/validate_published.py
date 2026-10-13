@@ -6,7 +6,8 @@ Compare the vespagram catalogue with the PUBLISHED ROI catalogue of Guerra et al
 paper/external/LSTID_ROI_published.csv with MATLAB (writetable). The file spans 11 Jan 2021 - 16 Oct 2024.
 
 Fronts are merged into trains with the same rule as the rebuilt ROI catalogue
-(compare.TRAIN_GAP), then matched to vespagram trains by time overlap within TOL.
+(catalogue_records.merge_fronts), then matched to vespagram trains by time overlap
+(catalogue_records.overlap_match).
 Results are merged into paper/numbers.json under "published_roi".
 
   python paper/validate_published.py
@@ -21,10 +22,8 @@ import numpy as np
 import polars as pl
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path[:0] = [str(ROOT), str(ROOT / "analysis")]
-from compare import TRAIN_GAP
-from catalogue_records import active_hours
-from paper_numbers import overlap_match, TOL
+sys.path[:0] = [str(ROOT / "analysis")]
+from catalogue_records import active_hours, merge_fronts, overlap_match
 from validate_hfint import chance   # same day-shift chance level as for HF-INT
 
 PUB = Path(__file__).resolve().parent / "external/LSTID_ROI_published.csv"
@@ -38,14 +37,8 @@ def published_trains():
           .with_columns(pl.col("start_time", "end_time").str.to_datetime("%Y-%m-%d %H:%M:%S"),
                         pl.col("speed", "period").cast(pl.Float64))
           .sort("start_time"))
-    trains = []
-    for r in df.iter_rows(named=True):
-        if trains and r["start_time"] <= trains[-1]["end_time"] + TRAIN_GAP:
-            trains[-1]["end_time"] = max(trains[-1]["end_time"], r["end_time"])
-            trains[-1]["n"] += 1
-        else:
-            trains.append({"start_time": r["start_time"], "end_time": r["end_time"], "n": 1})
-    return df, trains
+    return df, [{"start_time": s, "end_time": e, "n": len(m)}
+                for s, e, m in merge_fronts(df.iter_rows(named=True))]
 
 
 def main():

@@ -21,11 +21,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT), str(ROOT / "analysis")]
 import vespagram as v
 from detect_roi import _read_grid, discover_dates
-from catalogue_records import roi_trains, ROI_PKL
+from catalogue_records import roi_trains, overlap_match, ROI_PKL
 import compare_climatology as cc
 
 OUT = Path(__file__).resolve().parent / "numbers.json"
-TOL = dt.timedelta(minutes=15)          # train matching tolerance (as compare.py)
 HM  = ("high", "medium")
 
 
@@ -34,15 +33,6 @@ def med_iqr(x):
     x = x[np.isfinite(x)]
     q = np.percentile(x, [25, 50, 75])
     return {"median": round(float(q[1]), 3), "q25": round(float(q[0]), 3), "q75": round(float(q[2]), 3)}
-
-
-def overlap_match(a_start, a_end, b_start, b_end):
-    """For each interval of a: does any interval of b overlap it (with TOL)?"""
-    bs = np.array(b_start, dtype="datetime64[us]")
-    be = np.array(b_end, dtype="datetime64[us]")
-    tol = np.timedelta64(int(TOL.total_seconds()), "s")
-    return np.array([np.any((bs < np.datetime64(e) + tol) & (be > np.datetime64(s) - tol))
-                     for s, e in zip(a_start, a_end)])
 
 
 def main():
@@ -141,7 +131,8 @@ def main():
     import quiet_check as qc
     mid = (hm["t_start"] + (hm["t_end"] - hm["t_start"]) / 2).to_list()
     q = hm.with_columns(pl.Series("hp3h", qc.hp30_at(mid))).filter(pl.col("hp3h") < qc.HP30_MAX)
-    q = q.with_columns(pl.Series("roi_match", qc.classify(q, roi)))
+    q = q.with_columns(pl.Series("roi_match", overlap_match(
+        q["t_start"].to_list(), q["t_end"].to_list(), rs, re_)))
     N["quiet_time_hm"] = {
         "hp30_max": qc.HP30_MAX, "n": q.height,
         **{("roi_also" if k else "vespagram_only"): {

@@ -31,28 +31,17 @@ import inspect_confidence as ic
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "analysis"))
 from driver_regression import _load_driver_series, _rolling_on_grid
-from catalogue_records import roi_trains   # ROI fronts merged into trains (compare.py rule)
+from catalogue_records import roi_trains, overlap_match
 import pickle
 
 OUT      = ROOT / "results/vespagram/quiet_check"
 HP30_MAX = 2.0
-TOL      = dt.timedelta(minutes=15)       # same matching tolerance as compare.py
 ROI_COLOR = "#e07b00"
 
 
 def hp30_at(times):
     """Hp30, 3 h trailing mean, at each time."""
     return _rolling_on_grid(_load_driver_series("Hp30"), "Hp30", times, window_hours=3)
-
-
-def classify(tr, roi):
-    starts = np.array([r["start_time"] for r in roi], dtype="datetime64[us]")
-    ends   = np.array([r["end_time"] for r in roi], dtype="datetime64[us]")
-    tol = np.timedelta64(int(TOL.total_seconds()), "s")
-    out = []
-    for s, e in zip(tr["t_start"].to_numpy(), tr["t_end"].to_numpy()):
-        out.append(bool(np.any((starts < e + tol) & (ends > s - tol))))
-    return out
 
 
 def roi_boxes(ax, day, fronts):
@@ -106,7 +95,9 @@ def main(argv=None):
     tr = tr.with_columns(pl.Series("hp3h", hp30_at(mid)))
     quiet = tr.filter(pl.col("hp3h") < HP30_MAX)
     roi = roi_trains()
-    quiet = quiet.with_columns(pl.Series("roi_match", classify(quiet, roi)))
+    quiet = quiet.with_columns(pl.Series("roi_match", overlap_match(
+        quiet["t_start"].to_list(), quiet["t_end"].to_list(),
+        [r["start_time"] for r in roi], [r["end_time"] for r in roi])))
     print(f"quiet high+medium trains (Hp30 3 h < {HP30_MAX:g}): {quiet.height} of {tr.height}; "
           f"ROI also found {quiet['roi_match'].sum()}, vespagram only "
           f"{(~quiet['roi_match']).sum()}")
