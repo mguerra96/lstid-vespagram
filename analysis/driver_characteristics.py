@@ -163,7 +163,7 @@ def main(argv=None):
             print(f"  {name} / {param_key}: saved -> "
                  f"{args.out_dir / f'driver_characteristics_{name}_{param_key}.png'}")
 
-    print(f"Saved driver-characteristics plots -> {args.out_dir}  (n={len(records)} LSTID ROIs)")
+    print(f"Saved driver-characteristics plots -> {args.out_dir}  (n={len(records)} LSTID records)")
 
 
 if __name__ == "__main__":

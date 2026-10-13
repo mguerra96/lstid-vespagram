@@ -6,7 +6,7 @@ activity level, using the mean of each driver over the 3h preceding each
 ROI's ref_time.
 
 For each driver:
-  - occurrence: histogram of LSTID ROI counts, binned by the driver's 3h
+  - occurrence: histogram of LSTID counts, binned by the driver's 3h
     trailing mean at ref_time.
   - exposure: histogram of the driver's 3h trailing mean evaluated on a
     regular hourly grid spanning the whole dataset (i.e. how often each
@@ -129,7 +129,7 @@ def plot_driver_activity(name, occ_values, detected_values, exposure_values, out
     ax1.set_xlabel(f"{name} [{'nT' if name != 'Hp30' else 'index'}], 3h trailing mean, "
                    f"binned to {bin_width:g}  "
                    f"(rate omitted where exposure < {MIN_EXPOSURE} samples)")
-    ax1.set_ylabel("LSTID ROI count", color="tab:blue")
+    ax1.set_ylabel("LSTID count", color="tab:blue")
     ax1.tick_params(axis="y", labelcolor="tab:blue")
     ax1.grid(axis="y", linewidth=0.5, alpha=0.4)
     ax1.set_axisbelow(True)
@@ -198,7 +198,7 @@ def main(argv=None):
         plot_driver_activity(name, occ_values, detected_values, exposure_values, args.out_dir)
         print(f"  {name}: saved -> {args.out_dir / f'driver_activity_{name}.png'}")
 
-    print(f"Saved driver-activity plots -> {args.out_dir}  (n={len(records)} LSTID ROIs)")
+    print(f"Saved driver-activity plots -> {args.out_dir}  (n={len(records)} LSTID records)")
 
 
 if __name__ == "__main__":

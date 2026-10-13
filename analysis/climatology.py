@@ -140,12 +140,12 @@ def _month_hour_heatmap(heat, n_records, out_path, overlay=None, overlay_label=N
     ax.set_yticks(np.arange(12))
     ax.set_yticklabels([calendar.month_abbr[m] for m in range(1, 13)])
     ax.set_ylabel("Month")
-    title = f"LSTID ROI count by month x hour (n={n_records})"
+    title = f"LSTID count by month x hour (n={n_records})"
     if overlay_label:
         title += f"  +  {overlay_label} contour"
     ax.set_title(title)
     _add_cell_grid(ax, n_rows=12, n_cols=24)
-    fig.colorbar(im, ax=ax).set_label("ROI count")
+    fig.colorbar(im, ax=ax).set_label("LSTID count")
 
     has_legend = False
     if overlay is not None:
@@ -194,9 +194,9 @@ def plot_climatology(records, out_dir, overlays=None, f107_by_year=None,
     ax.bar(np.arange(24), np.bincount(hours, minlength=24), color="tab:blue")
     ax.set_xticks(np.arange(0, 24, 2))
     ax.set_xlabel("Hour (UT)")
-    ax.set_ylabel("LSTID ROI count", color="tab:blue")
+    ax.set_ylabel("LSTID count", color="tab:blue")
     ax.tick_params(axis="y", labelcolor="tab:blue")
-    ax.set_title(f"Hourly distribution of LSTID ROIs (n={len(records)})")
+    ax.set_title(f"Hourly distribution of LSTIDs (n={len(records)})")
     ax.grid(axis="y", linewidth=0.5, alpha=0.4)
     ax.set_axisbelow(True)
     if iu_by_hour is not None or il_by_hour is not None:
@@ -223,9 +223,9 @@ def plot_climatology(records, out_dir, overlays=None, f107_by_year=None,
     ax.set_xticks(np.arange(1, 13))
     ax.set_xticklabels([calendar.month_abbr[m] for m in range(1, 13)])
     ax.set_xlabel("Month")
-    ax.set_ylabel("LSTID ROI count", color="tab:orange")
+    ax.set_ylabel("LSTID count", color="tab:orange")
     ax.tick_params(axis="y", labelcolor="tab:orange")
-    ax.set_title(f"Monthly distribution of LSTID ROIs (n={len(records)})")
+    ax.set_title(f"Monthly distribution of LSTIDs (n={len(records)})")
     ax.grid(axis="y", linewidth=0.5, alpha=0.4)
     ax.set_axisbelow(True)
     if hp30_by_month is not None:
@@ -247,9 +247,9 @@ def plot_climatology(records, out_dir, overlays=None, f107_by_year=None,
     ax.set_xticks(year_range)
     ax.set_xticklabels(year_range, rotation=45)
     ax.set_xlabel("Year")
-    ax.set_ylabel("LSTID ROI count", color="tab:green")
+    ax.set_ylabel("LSTID count", color="tab:green")
     ax.tick_params(axis="y", labelcolor="tab:green")
-    ax.set_title(f"Yearly distribution of LSTID ROIs (n={len(records)})")
+    ax.set_title(f"Yearly distribution of LSTIDs (n={len(records)})")
     ax.grid(axis="y", linewidth=0.5, alpha=0.4)
     ax.set_axisbelow(True)
     if f107_by_year is not None:
@@ -296,16 +296,16 @@ def plot_climatology(records, out_dir, overlays=None, f107_by_year=None,
     ax.set_yticks(np.arange(12))
     ax.set_yticklabels([calendar.month_abbr[m] for m in range(1, 13)])
     ax.set_ylabel("Month")
-    ax.set_title(f"LSTID ROI count by month x year (n={len(records)})")
+    ax.set_title(f"LSTID count by month x year (n={len(records)})")
     _add_cell_grid(ax, n_rows=12, n_cols=len(year_range))
-    fig.colorbar(im, ax=ax).set_label("ROI count")
+    fig.colorbar(im, ax=ax).set_label("LSTID count")
     fig.tight_layout()
     fig.savefig(out_dir / "climatology_month_year_heatmap.png", dpi=150)
     plt.close(fig)
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description="LSTID ROI climatological analysis.")
+    parser = argparse.ArgumentParser(description="LSTID climatological analysis.")
     parser.add_argument("--pkl", type=Path,
                         default=Path(__file__).resolve().parent.parent
                                 / "results/vespagram/lstid_trains_highmed.pkl",
@@ -356,7 +356,7 @@ def main(argv=None):
                      f107_by_year=f107_by_year, hp30_by_month=hp30_by_month,
                      iu_by_hour=iu_by_hour, il_by_hour=il_by_hour,
                      sza_month_hour=sza_month_hour)
-    print(f"Saved climatology plots -> {args.out_dir}  (n={len(records)} LSTID ROIs)")
+    print(f"Saved climatology plots -> {args.out_dir}  (n={len(records)} LSTID records)")
 
 
 if __name__ == "__main__":

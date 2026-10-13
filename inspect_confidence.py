@@ -27,9 +27,12 @@ ROOT   = Path(__file__).parent
 TRAINS = ROOT / "results/vespagram/trains.parquet"
 OUT    = ROOT / "results/vespagram/confidence_check"
 
-TIERS = {"high":   ("#a6d96a", "full-array detection"),
-         "medium": ("#fee08b", "bands only, semblance ≥ 0.8"),
-         "low":    ("#d9d9d9", "bands only, semblance < 0.8")}
+# tier -> (label colour, rule, from the thresholds of vespagram.train_confidence;
+# a train slower than confidence_min_speed sits one tier lower than its score)
+_C = v.VespaConfig()
+TIERS = {"high":   ("#a6d96a", f"score ≥ {_C.confidence_high:.2f}"),
+         "medium": ("#fee08b", f"score {_C.confidence_medium:.2f}–{_C.confidence_high:.2f}"),
+         "low":    ("#d9d9d9", f"score < {_C.confidence_medium:.2f}")}
 HALF_H = 4.0
 VMAX   = 0.06
 NCOL   = 3
@@ -51,7 +54,7 @@ def draw_train(ax, tr, members, lats, cfg, boxed):
     tm = 0.5 * (tr["t_start_s"] + tr["t_end_s"]) / 3600
     ax.text(tm, tr["lat_hi"] - 0.3,
             f"#{tr['train_id']} {tr['speed_m_s']:.0f} m/s · {tr['period_s'] / 60:.0f} min · "
-            f"S={tr['semblance']:.2f}",
+            f"score {tr['confidence_score']:.2f}",
             fontsize=7, ha="center", va="top", clip_on=True,
             bbox=dict(boxstyle="round,pad=0.2", fc=TIERS[tr["confidence"]][0], ec="k" if boxed else "none",
                       lw=0.6, alpha=0.95))

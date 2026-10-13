@@ -92,7 +92,7 @@ def main(argv=None):
             print(f"  {group_key} / {param_key}: saved -> "
                  f"{args.out_dir / f'characteristics_{group_key}_{param_key}.png'}")
 
-    print(f"Saved temporal-characteristics plots -> {args.out_dir}  (n={len(records)} LSTID ROIs)")
+    print(f"Saved temporal-characteristics plots -> {args.out_dir}  (n={len(records)} LSTID records)")
 
 
 if __name__ == "__main__":
