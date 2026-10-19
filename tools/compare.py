@@ -31,10 +31,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # the repository root
 import detect_roi
 import vespagram
 
-ROOT      = Path(__file__).parent
+ROOT      = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "analysis"))
 from catalogue_records import roi_trains, MATCH_TOL, ROI_PKL, VESPA_PQ
 

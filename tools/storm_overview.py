@@ -6,9 +6,9 @@ the LSTID trains (label colour = confidence tier, colour scale fitted to the
 day) and the SYM-H / SME traces underneath. Each panel title also gives how many
 hours of the day the trains cover, to compare with what the eye sees.
 
-  python storm_overview.py                    storm days: the 2 lowest daily SYM-H
+  python tools/storm_overview.py                    storm days: the 2 lowest daily SYM-H
                                               minima per year (>= 5 days apart)
-  python storm_overview.py --random 40        random days, uniform over ALL keogram
+  python tools/storm_overview.py --random 40        random days, uniform over ALL keogram
                                               days (with or without trains)
 
 Output (results/vespagram/storms/ or results/vespagram/random_days/):
@@ -17,7 +17,9 @@ Output (results/vespagram/storms/ or results/vespagram/random_days/):
   daily/<date>_vespa.png  the standard vespagram figure for each day
 """
 
+import sys
 import argparse
+from pathlib import Path
 from dataclasses import replace
 
 import numpy as np
@@ -27,6 +29,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # the repository root
 import vespagram as v
 from detect_roi import discover_dates
 from inspect_confidence import draw_train, TIERS, ROOT

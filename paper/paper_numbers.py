@@ -18,7 +18,7 @@ import pandas as pd
 import polars as pl
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path[:0] = [str(ROOT), str(ROOT / "analysis")]
+sys.path[:0] = [str(ROOT), str(ROOT / "analysis"), str(ROOT / "tools")]
 import vespagram as v
 from detect_roi import _read_grid, discover_dates
 from catalogue_records import roi_trains, overlap_match, ROI_PKL

@@ -9,7 +9,7 @@ large vespagram/ROI ratio at low activity:
 Each panel: 8 h keogram window centred on the sampled train (boxed), all
 vespagram trains of the day, and ROI fronts as orange dashed boxes.
 
-  python quiet_check.py [--n 12] [--seed 0]
+  python tools/quiet_check.py [--n 12] [--seed 0]
 Output: results/vespagram/quiet_check/
 """
 
@@ -28,7 +28,7 @@ from matplotlib.lines import Line2D
 
 import inspect_confidence as ic
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "analysis"))
 from driver_regression import _load_driver_series, _rolling_on_grid
 from catalogue_records import roi_trains, overlap_match

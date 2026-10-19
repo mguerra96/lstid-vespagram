@@ -6,10 +6,11 @@ each tier, N random trains; each panel is an 8 h keogram window (full latitude)
 centred on the sampled train, with every train of that day drawn: crests solid,
 troughs dashed, label coloured by tier. The sampled train is boxed.
 
-  python inspect_confidence.py [--n 12] [--seed 0]
+  python tools/inspect_confidence.py [--n 12] [--seed 0]
 Output: results/vespagram/confidence_check/sheet_<tier>.png
 """
 
+import sys
 import argparse
 import datetime as dt
 from pathlib import Path
@@ -21,9 +22,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # the repository root
 import vespagram as v
 
-ROOT   = Path(__file__).parent
+ROOT   = Path(__file__).resolve().parent.parent
 TRAINS = ROOT / "results/vespagram/trains.parquet"
 OUT    = ROOT / "results/vespagram/confidence_check"
 
