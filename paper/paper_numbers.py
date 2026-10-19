@@ -52,26 +52,30 @@ def main():
     # ── catalogue ──
     tr = pl.read_parquet(ROOT / "results/vespagram/trains.parquet")
     de = pl.read_parquet(ROOT / "results/vespagram/detections.parquet")
-    tr = tr.with_columns(((pl.col("t_end") - pl.col("t_start")).dt.total_minutes() / 60).alias("dur_h"),
-                         (pl.col("lat_hi") - pl.col("lat_lo")).alias("lat_ext"))
+    tr = tr.with_columns(((pl.col("t_end") - pl.col("t_start")).dt.total_minutes() / 60).alias("dur_h"))
     hm = tr.filter(pl.col("confidence").is_in(HM))
     N["catalogue"] = {
         "n_trains": tr.height, "n_detections": de.height,
         "tiers": dict(tr.group_by("confidence").len().iter_rows()),
         "n_high_medium": hm.height,
-        "n_not_owned": int((~tr["owned"]).sum()),
-        "share_curved_hm": round(float((hm["geometry"] == "curved").mean()), 3),
-        "share_full_lat_hm": round(float((hm["lat_ext"] >= 20).mean()), 3),
+        "share_single_detection_hm": round(float((hm["n_detections"] == 1).mean()), 3),
+        "share_single_array_all": round(float((tr["coverage"] <= 1 / 3 + 1e-9).mean()), 3),
+        "n_hm_longer_12h": int((hm["dur_h"] > 12).sum()),
+        "share_hm_longer_12h": round(float((hm["dur_h"] > 12).mean()), 3),
+        "max_duration_h": round(float(tr["dur_h"].max()), 1),
+        "speed_halfwidth_hm_pct": round(float(((hm["speed_hi_m_s"] - hm["speed_lo_m_s"])
+                                               / 2 / hm["speed_m_s"]).median() * 100), 1),
         "trains_per_year_hm": {int(y): int(n) for y, n in
                                hm.group_by(pl.col("date").dt.year()).len().sort("date").iter_rows()},
     }
     N["characteristics_hm"] = {k: med_iqr(hm[c].to_numpy()) for k, c in
                                [("speed_m_s", "speed_m_s"), ("period_min", "period_min"),
                                 ("wavelength_km", "wavelength_km"), ("amplitude_tecu", "amplitude"),
-                                ("duration_h", "dur_h"), ("lat_extent_deg", "lat_ext")]}
+                                ("duration_h", "dur_h"), ("coverage", "coverage"),
+                                ("n_detections", "n_detections")]}
     N["characteristics_by_tier"] = {
         c: {k: med_iqr(tr.filter(pl.col("confidence") == c)[k].to_numpy())["median"]
-            for k in ("speed_m_s", "period_min", "amplitude", "semblance", "dur_h")}
+            for k in ("speed_m_s", "period_min", "amplitude", "semblance", "coverage", "dur_h")}
         for c in ("high", "medium", "low")}
 
     # ── occupancy and agreement with the ROI catalogue ──
@@ -87,6 +91,11 @@ def main():
             a[f"{k}_hours_in_roi_pct"] = float(both / ys[k][m].sum() * 100)
         agree[label] = {k: round(x, 1) for k, x in a.items()}
     N["occupancy_pct_and_agreement"] = agree
+    N["catalogue"]["active_h_per_year_hm"] = {int(y): int(ys["vespagram_hm"][yr == y].sum())
+                                              for y in np.unique(yr)}
+    N["catalogue"]["median_duration_h_per_year_hm"] = {
+        int(y): round(float(d), 1) for y, d in
+        hm.group_by(pl.col("date").dt.year()).agg(pl.col("dur_h").median()).sort("date").iter_rows()}
 
     roi = roi_trains()
     rs = [r["start_time"] for r in roi]; re_ = [r["end_time"] for r in roi]
@@ -123,6 +132,8 @@ def main():
     r = pd.read_csv(ROOT / "results/climatology_compare/ratio.csv")
     hp = r[r.group == "Hp30, 3 h mean"]
     N["ratio_vs_hp30"] = {row.level: {"occ_roi": round(row.occ_roi, 2), "occ_hm": round(row.occ_vespagram_hm, 2),
+                                      "active_h_roi": round(row.occ_roi * row.hours / 100),
+                                      "active_h_hm": round(row.occ_vespagram_hm * row.hours / 100),
                                       "ratio_hm": round(row.ratio_vespagram_hm, 2),
                                       "ci_hm": [round(row.lo_vespagram_hm, 2), round(row.hi_vespagram_hm, 2)]}
                           for row in hp.itertuples()}
@@ -144,13 +155,21 @@ def main():
 
     # ── case events ──
     cases = {}
-    for day in ("2015-03-17", "2024-05-11", "2024-10-10"):
-        s = tr.filter(pl.col("date") == dt.date.fromisoformat(day)).sort("t_start")
-        cases[day] = [{"t": f"{a:%H:%M}-{b:%H:%M}", "speed": round(sp), "period": round(p),
-                       "conf": c, "lat": [lo, hi]}
-                      for a, b, sp, p, c, lo, hi in s.select("t_start", "t_end", "speed_m_s", "period_min",
-                                                             "confidence", "lat_lo", "lat_hi").iter_rows()]
+    for name, a0, a1 in [("2024-08-11/12", "2024-08-11 12:00", "2024-08-13 00:00"),   # the windows of Fig. 4
+                         ("2015-03-17/18", "2015-03-17 00:00", "2015-03-18 03:00"),
+                         ("2024-05-10/11", "2024-05-10 12:00", "2024-05-11 12:00")]:
+        s = tr.filter((pl.col("t_end") > dt.datetime.fromisoformat(a0))
+                      & (pl.col("t_start") < dt.datetime.fromisoformat(a1))).sort("t_start")
+        cases[name] = [{"t": f"{a:%d %H:%M}-{b:%d %H:%M}", "speed": round(sp),
+                        "speed_lo_hi": [round(lo), round(hi)], "period": round(p),
+                        "conf": c, "coverage": round(cv, 2)}
+                       for a, b, sp, lo, hi, p, c, cv in s.select(
+                           "t_start", "t_end", "speed_m_s", "speed_lo_m_s", "speed_hi_m_s",
+                           "period_min", "confidence", "coverage").iter_rows()]
     N["case_events"] = cases
+    f1 = de.filter((pl.col("date") == dt.date(2024, 8, 12)) & (pl.col("train_id") == 1))
+    N["fig1_first_train"] = {"n_detections": f1.height,      # the example in Methods
+                             "speed_range_m_s": [round(f1["speed_m_s"].min()), round(f1["speed_m_s"].max())]}
 
     OUT.write_text(json.dumps(N, indent=1, default=str), encoding="utf-8")
     print(json.dumps(N, indent=1, default=str))

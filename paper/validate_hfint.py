@@ -101,6 +101,13 @@ def main():
         rec[name] = r
     out["matching"] = rec
 
+    # events in other directions: share with a westward component, and of those the share starting 03-09 UT
+    other = hf.filter(~pl.col("south"))
+    west = other.filter((pl.col("azi") > 180) & (pl.col("azi") < 360))
+    out["other"] = {"n": other.height,
+                    "westward_pct": round(west.height / other.height * 100, 1),
+                    "westward_start_03_09_ut_pct": round(float(west["start"].dt.hour().is_between(3, 8).mean() * 100), 1)}
+
     # speeds of matched southward events vs the overlapping high+medium train
     hm = ves.filter(pl.col("confidence").is_in(["high", "medium"]))
     pairs = []

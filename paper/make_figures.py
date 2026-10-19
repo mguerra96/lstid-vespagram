@@ -46,9 +46,7 @@ VESPA    = ROOT / "results/vespagram"
 MM   = 1 / 25.4
 WIDE = 183 * MM                      # double-column width
 TIER = {"high": "#0072B2", "medium": "#E69F00", "low": "#999999"}
-LANE = ["k", "#00c853", "#d500f9"]   # fronts of a train by its lane in the strip: black, then
-                                     # green and magenta for trains that overlap an earlier one
-HM_C, HF_C = "#222222", "#CC79A7"    # high+medium aggregate; HF-INT
+HM_C, HF_C = "#009E73", "#CC79A7"    # high+medium aggregate; HF-INT
 SYMH_C, SME_C = "#5b3f8c", "#b5532a"
 KEO_LIM = 0.15                       # TECu, band-passed keograms
 CFG = v.VespaConfig()
@@ -82,7 +80,6 @@ def catalogue():
     across days when the catalogue is built)."""
     tr = pd.read_parquet(VESPA / "trains.parquet")
     tr["dur_h"] = (tr["t_end"] - tr["t_start"]).dt.total_seconds() / 3600
-    tr["lat_ext"] = tr["lat_hi"] - tr["lat_lo"]
     return tr
 
 
@@ -94,32 +91,18 @@ def trains_in(tr, t0, t1):
     return tr[(tr["t_end"] > t0) & (tr["t_start"] < t1)].sort_values("t_start")
 
 
-def lanes(trains, t0, t1):
-    """Lane of each train in the strip: 0, or the first free lane for a train that
-    overlaps an earlier one in time. Trains must be sorted by start time."""
-    ends, out = [], []
-    for _, tr in trains.iterrows():
-        s, e = max(tr["t_start"], t0), min(tr["t_end"], t1)
-        k = next((i for i, end in enumerate(ends) if end <= s), len(ends))
-        if k == len(ends):
-            ends.append(e)
-        ends[k] = e
-        out.append(k)
-    return out
+RIDGE = "#FFD400"  # vespagram ridges: visible on the Blues colormap
 
 
-def draw_fronts(ax, trains, dets, t0, t1):
+def draw_fronts(ax, trains, dets):
     """Crest (solid) and trough (dashed) lines of each train, drawn piecewise over the
-    latitude slice of each sub-array detection (the full-array detection if the train
-    has no sub-array detection), as in vespagram._draw_train. The lines take the colour
-    of the train's lane (LANE), so that trains overlapping in time can be told apart.
-    Time axis in matplotlib date units."""
+    latitude slice of each sub-array detection, as in vespagram._draw_train. Time
+    axis in matplotlib date units."""
     lat_min, lat_max = 37.5, 57.5
-    for lane, (_, tr) in zip(lanes(trains, t0, t1), trains.iterrows()):
+    for _, tr in trains.iterrows():
         m = dets[(dets["date"] == tr["date"]) & (dets["train_id"] == tr["train_id"])]
-        band = m[~m["is_full"]]
         midnight = pd.Timestamp(tr["date"])
-        for _, d in (band if len(band) else m).iterrows():
+        for _, d in m.iterrows():
             dd = dict(d)
             dd["lat_c"] = 0.5 * (d["lat_lo"] + d["lat_hi"])
             lo, hi = v._owned_slice(dd, lat_min, lat_max, CFG)
@@ -127,24 +110,21 @@ def draw_fronts(ax, trains, dets, t0, t1):
             off = (la - dd["lat_c"]) * v.M_PER_DEG * d["slowness"]
             for tc, ls in [(c, "-") for c in d["crests_s"]] + [(c, (0, (2.5, 1.5))) for c in d["troughs_s"]]:
                 tt = midnight + pd.to_timedelta(tc - off, unit="s")
-                ax.plot(mdates.date2num(tt), la, color=LANE[lane % len(LANE)], lw=0.7, ls=ls)
+                ax.plot(mdates.date2num(tt), la, color="k", lw=0.7, ls=ls)
 
 
 def train_strip(ax, trains, t0, t1):
-    """One bar per train, coloured by confidence and labelled with its speed; trains
-    that overlap in time are put in separate lanes, and a bar below the first lane is
-    outlined in the colour of its fronts (LANE)."""
-    lane = lanes(trains, t0, t1)
-    for k, (_, tr) in zip(lane, trains.iterrows()):
+    """One bar per train (trains never overlap in time), coloured by confidence and
+    labelled with its speed."""
+    for _, tr in trains.iterrows():
         s, e = max(tr["t_start"], t0), min(tr["t_end"], t1)
         x0, x1 = mdates.date2num(s), mdates.date2num(e)
-        ax.barh(k, x1 - x0, left=x0, height=0.72, color=TIER[tr["confidence"]],
-                edgecolor=LANE[k % len(LANE)], lw=1.2 if k else 0)
+        ax.barh(0, x1 - x0, left=x0, height=0.72, color=TIER[tr["confidence"]], lw=0)
         if e - s < pd.Timedelta(minutes=40):      # cut by the window edge: no room for a label
             continue
-        ax.text(0.5 * (x0 + x1), k, f"{tr['speed_m_s']:.0f}", ha="center", va="center",
+        ax.text(0.5 * (x0 + x1), 0, f"{tr['speed_m_s']:.0f}", ha="center", va="center",
                 fontsize=5.5, color="k" if tr["confidence"] != "high" else "white")
-    ax.set_ylim(max(lane, default=0) + 0.5, -0.5)
+    ax.set_ylim(0.5, -0.5)
     ax.set_xlim(mdates.date2num(t0), mdates.date2num(t1))
     ax.set_yticks([])
     for sp in ("left", "bottom"):
@@ -218,17 +198,13 @@ def colorbar(fig, im, ax, label, ticks=None):
 
 # ── Figure 1: processing chain ────────────────────────────────────────────────
 
-SPEEDS = [200, 300, 500, 1000]
+SPEEDS = [300, 500, 700, 1000, 1500]
 
 
-def speed_axis(ax, labels=True):
-    pos = [s * 1e3 / u for u in SPEEDS for s in (1, -1)]
-    lbl = [f"{'+' if s > 0 else '−'}{u}" for u in SPEEDS for s in (1, -1)]
-    ax.set_yticks(pos, lbl if labels else [])
-    ax.set_ylim(-1e3 / 180, 1e3 / 180)
+def speed_axis(ax, labels=True, speeds=SPEEDS):
+    ax.set_yticks([1e3 / u for u in speeds], [str(u) for u in speeds] if labels else [])
     for u in (CFG.lstid_min_speed, CFG.lstid_max_speed):
-        for s in (1, -1):
-            ax.axhline(s * 1e3 / u, color="0.45", lw=0.4, ls=(0, (3, 2)))
+        ax.axhline(1e3 / u, color="0.45", lw=0.4, ls=(0, (3, 2)))
 
 
 def vespa(ax, r, t0):
@@ -241,7 +217,7 @@ def vespa(ax, r, t0):
     for d in r["dets"]:
         kept = "train_id" in d
         xx = mdates.date2num(t0 + pd.to_timedelta(d["ridge_t"], unit="s"))
-        ax.scatter(xx, d["ridge_p"] * 1e3, s=0.6, lw=0, c="k" if kept else "#D55E00",
+        ax.scatter(xx, d["ridge_p"] * 1e3, s=0.6, lw=0, c=RIDGE if kept else "#D55E00",
                    rasterized=True, zorder=3)
     return im
 
@@ -258,9 +234,9 @@ def fig1():
     tr = trains_in(catalogue(), t0, t1)
     de = detections()
 
-    fig = plt.figure(figsize=(WIDE, 205 * MM))
-    gs = GridSpec(5, 1, height_ratios=[1, 1, 1, 1, 1.4], hspace=0.42, figure=fig)
-    ge = GridSpecFromSubplotSpec(2, 1, subplot_spec=gs[4], height_ratios=[0.32, 1], hspace=0.06)
+    fig = plt.figure(figsize=(WIDE, 155 * MM))
+    gs = GridSpec(4, 1, height_ratios=[1, 1, 0.6, 1.4], hspace=0.42, figure=fig)
+    ge = GridSpecFromSubplotSpec(2, 1, subplot_spec=gs[3], height_ratios=[0.32, 1], hspace=0.06)
 
     ax = fig.add_subplot(gs[0])
     im = keogram(ax, Z, lats_raw, day + pd.to_timedelta(traw, unit="s"), lim=0.3)
@@ -277,21 +253,11 @@ def fig1():
     tag(ax, "b", x=-0.07)
     ax.set_title("Band-passed (25–200 min) and decimated, 0.25° × 2 min", loc="left")
 
-    ax = fig.add_subplot(gs[2])
-    im = vespa(ax, results[0], day)
-    speed_axis(ax)
-    ax.set_ylabel("Speed (m s$^{-1}$)\n+ equatorward")
-    time_axis(ax, t0, t1, labels=False)
-    colorbar(fig, im, ax, "Semblance", ticks=[0, 0.5, 1])
-    tag(ax, "c", x=-0.07)
-    ax.set_title("Full-array vespagram, 37.5–57.5°N "
-                 "(black: ridges in a train; orange: rejected ridges)", loc="left")
-
-    sub = GridSpecFromSubplotSpec(1, 5, subplot_spec=gs[3], wspace=0.08)
-    for i, r in enumerate(results[1:]):
+    sub = GridSpecFromSubplotSpec(1, len(results), subplot_spec=gs[2], wspace=0.08)
+    for i, r in enumerate(results):
         ax = fig.add_subplot(sub[i])
-        vespa(ax, r, day)
-        speed_axis(ax, labels=(i == 0))
+        im = vespa(ax, r, day)
+        speed_axis(ax, labels=(i == 0), speeds=[300, 500, 1000])  # the panel is too short for more
         ax.set_xlim(mdates.date2num(t0), mdates.date2num(t1))
         ax.xaxis.set_major_locator(mdates.HourLocator(byhour=[0, 6, 12, 18]))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H"))
@@ -299,18 +265,19 @@ def fig1():
         ax.set_title(f"{r['lat_lo']:g}–{r['lat_hi']:g}°N", loc="left")
         if i == 0:
             ax.set_ylabel("Speed (m s$^{-1}$)")
-            tag(ax, "d", x=-0.37)
+            tag(ax, "c", x=-0.22, y=1.15)
+    colorbar(fig, im, ax, "Semblance", ticks=[0, 0.5, 1])
 
     ax_s = fig.add_subplot(ge[0])
     ax = fig.add_subplot(ge[1], sharex=ax_s)
     train_strip(ax_s, tr, t0, t1)
-    tag(ax_s, "e", x=-0.07, y=0.2)
+    tag(ax_s, "d", x=-0.07, y=0.2)
     ax_s.set_title("Trains (bar colour: confidence level; label: speed in m s$^{-1}$)",
                    loc="left")
     tier_legend(ax_s, loc="lower right", bbox_to_anchor=(1.0, 0.95))
     k = (t >= 0) & (t < 86400)
     im = keogram(ax, X[:, k], lats, day + pd.to_timedelta(t[k], unit="s"))
-    draw_fronts(ax, tr, de, t0, t1)
+    draw_fronts(ax, tr, de)
     ax.set_ylim(37.5, 57.5)
     time_axis(ax, t0, t1)
     colorbar(fig, im, ax, "dTEC (TECu)")
@@ -429,13 +396,23 @@ def fig3():
     ax = axes[1, 0]
     xi = np.arange(len(hp))
     r = hp["ratio_vespagram_hm"].to_numpy()
-    ax.errorbar(xi, r, yerr=[r - hp["lo_vespagram_hm"], hp["hi_vespagram_hm"] - r], fmt="o",
-                ms=3.5, color=HM_C, ecolor=HM_C, elinewidth=0.8, capsize=2)
+    ax.plot(xi, r, "o", ms=3.5, color=HM_C)
+    for x, v in zip(xi, r):
+        ax.annotate(f"{v:.1f}", (x, v), xytext=(0, 5), textcoords="offset points",
+                    ha="center", fontsize=6.5)
+    # hours with an LSTID in each catalogue: the counts the ratio is made of
+    ax.text(-0.45, 7.0, "Active hours: ROI detector (upper row), vespagram (lower row)",
+            ha="left", va="center", fontsize=6, color="0.3")
+    for y, col in [(6.3, "occ_roi"), (5.6, "occ_vespagram_hm")]:
+        for x, n in zip(xi, hp[col] * hp["hours"] / 100):
+            ax.text(x, y, f"{n:,.0f}", ha="center", va="center", fontsize=6, color="0.3")
     ax.axhline(1, color="0.5", lw=0.6, ls=(0, (3, 2)))
+    ax.set_yticks(range(5))
     ax.set_xticks(xi, hp["level"])
+    ax.set_xlim(-0.5, len(xi) - 0.5)
     ax.set_xlabel("Hp30, 3-h mean")
-    ax.set_ylabel("Occurrence ratio,\nvespagram / image-based")
-    ax.set_ylim(0, 7)
+    ax.set_ylabel("Occurrence ratio,\nvespagram / ROI detector")
+    ax.set_ylim(0, 7.4)
     tag(ax, "c", x=-0.15)
 
     ax = axes[1, 1]
@@ -481,7 +458,7 @@ def fig4():
         ax = fig.add_subplot(gs[1], sharex=ax_s)
         X, lats, times = bandpassed(t0, t1)
         im = keogram(ax, X, lats, times)
-        draw_fronts(ax, trs, de, t0, t1)
+        draw_fronts(ax, trs, de)
         ax.set_ylim(37.5, 57.5)
         time_axis(ax, t0, t1, labels=False)
         midnights(ax, t0, t1)
@@ -507,23 +484,24 @@ def fig4():
 def fig5():
     tr = catalogue()
     tr["slowness_s_km"] = 1e3 / tr["speed_m_s"]
-    # speeds come from a discrete slowness grid: bin in slowness (3 grid steps per bin)
-    dp = 2e3 * CFG.max_slowness / (CFG.n_slowness - 1) * 3
+    # bin in slowness, 3 grid steps per bin
+    dp = 1e3 * CFG.slowness_step * 3
     p_bins = np.arange(1e3 / 1500 - dp / 2, 1e3 / 300 + dp, dp)
     panels = [("slowness_s_km", "Speed (m s$^{-1}$)", p_bins, False),
               ("period_min", "Period (min)", np.arange(30, 125, 5), False),
               ("wavelength_km", "Wavelength (km)", np.arange(500, 5600, 200), False),
               ("amplitude", "Amplitude (TECu)", np.geomspace(0.01, 0.5, 26), True),
-              ("dur_h", "Duration (h)", np.arange(0.5, 12.25, 0.5), False),
-              ("lat_ext", "Latitudinal extent (°)", np.arange(8.75, 21.5, 2.5), False)]
+              ("dur_h", "Duration (h)", np.arange(0.5, 24.5, 1.0), False)]
+    hm = tr["confidence"].isin(["high", "medium"])
+    groups = [("High + medium confidence", HM_C, hm), ("Low confidence", TIER["low"], ~hm)]
     fig, axes = plt.subplots(2, 3, figsize=(WIDE, 92 * MM))
     fig.subplots_adjust(hspace=0.45, wspace=0.28)
-    for ax, (col, label, bins, logx), letter in zip(axes.ravel(), panels, "abcdef"):
-        for tier, color in TIER.items():
-            x = tr.loc[tr["confidence"] == tier, col].to_numpy()
+    for ax, (col, label, bins, logx), letter in zip(axes.ravel(), panels, "abcde"):
+        for name, color, m in groups:
+            x = tr.loc[m, col].to_numpy()
             w = np.full(len(x), 100 / len(x))
             ax.hist(np.clip(x, bins[0], bins[-1] - 1e-9), bins=bins, weights=w, histtype="step",
-                    color=color, lw=1.1, label=f"{tier.capitalize()} confidence (n = {len(x)})")
+                    color=color, lw=1.2, label=f"{name} (n = {len(x)})")
             ax.axvline(np.median(x), color=color, lw=0.6, ls=(0, (2, 1.5)))
         if logx:
             ax.set_xscale("log")
@@ -535,8 +513,8 @@ def fig5():
         ax.set_ylabel("Share of trains (%)")
         tag(ax, letter, x=-0.16)
     h, l = axes[0, 0].get_legend_handles_labels()
-    fig.legend(h, l, loc="lower center", ncol=3,
-               bbox_to_anchor=(0.5, 0.93), handlelength=1.5, columnspacing=2.0)
+    axes[1, 2].axis("off")
+    axes[1, 2].legend(h, l, loc="center", handlelength=1.5)
     save(fig, 5)
 
 
@@ -587,8 +565,15 @@ def fig6():
     ax = fig.add_subplot(gs[:, 1])
     im = ax.imshow(H, aspect="auto", origin="lower", cmap="Blues",
                    extent=[-0.5, 23.5, 0.5, 12.5], vmin=0)
-    ax.contour(np.arange(24), np.arange(1, 13), S, levels=[90], colors="#D55E00",
+    # terminator at the IPP height: the Sun sets there when its zenith angle at the ground
+    # exceeds 90 deg by the dip of the horizon, arccos(R / (R + h))
+    h_km, r_km = 300, 6371
+    sza_300 = 90 + np.degrees(np.arccos(r_km / (r_km + h_km)))
+    ax.contour(np.arange(24), np.arange(1, 13), S, levels=[sza_300], colors="#D55E00",
                linewidths=1.0, linestyles="--")
+    ax.plot([], [], color="#D55E00", lw=1.0, ls="--",
+            label=f"Solar terminator at {h_km} km (SZA {sza_300:.0f}°), 47.5°N, 10°E")
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), frameon=False)
     ax.set_xticks(range(0, 24, 3))
     ax.set_yticks(range(1, 13), [calendar.month_abbr[i] for i in range(1, 13)])
     ax.set_xlabel("UT (h)")

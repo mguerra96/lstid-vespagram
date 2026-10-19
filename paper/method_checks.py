@@ -6,12 +6,11 @@ the catalogue:
 
   passband    response of the processing chain to a sinusoid in time (arc
               detrending, 10-min mean, decimation, band-pass)
-  resolution  width of the semblance peak of a synthetic plane wave, for the
-              20 deg array and a 10 deg sub-array
+  resolution  width of the semblance peak of a synthetic plane wave on a 10 deg
+              sub-array
   density     does the number of observations change the number of trains?
               Days that lose a constellation against their neighbours, and
               occurrence at the same Hp30 year by year
-  overlap     share of trains that overlap another train in time
   empty       share of keogram cells without any observation (--empty-cells;
               reads the daily TEC files, about 0.9 TB; per-day values are kept
               in results/vespagram/empty_cells.csv and a rerun resumes from it)
@@ -22,6 +21,9 @@ Results are merged into paper/numbers.json under "method_checks".
   python paper/method_checks.py --empty-cells    also the empty cells, all days
   python paper/method_checks.py --tec-file paper/external/tec_2024-08-12.parquet
                                                  also the empty cells of the given days only
+                                                 (the paper quotes 2024-08-12 and 2017-01-10,
+                                                 the day with the fewest observations, from
+                                                 TEC_DIR/tec_2017-01-10.parquet)
 """
 
 import sys
@@ -78,33 +80,34 @@ def passband(cfg):
 # ── slowness resolution ─────────────────────────────────────────────────────────
 
 def resolution(cfg, period_min=55.0):
-    """Width at half maximum of the semblance peak of a noise-free plane wave."""
+    """Width at half maximum of the semblance peak of a noise-free plane wave on a
+    10-degree sub-array (the slowness range runs through infinite speed so that the
+    peak is not cut)."""
     lats = np.arange(57.5, 37.5 - 1e-9, -cfg.lat_step_deg)
     t    = np.arange(0, 24 * 3600, cfg.time_step_s, dtype=float)
     tc, T = 12 * 3600.0, period_min * 60
-    p_fine = np.linspace(1 / 20000, cfg.max_slowness, 4000)
+    p_fine = np.linspace(-1 / 300, 1 / 120, 4000)
+    lo, hi = 42.5, 52.5
+    rows = (lats >= lo - 1e-6) & (lats <= hi + 1e-6)
+    dist = v.meridian_distance(lats[rows], 0.5 * (lo + hi))
     out = {"period_min": period_min}
     for speed in (600, 1200):
-        dist_all = v.meridian_distance(lats, 47.5)
-        tau = t[None, :] + dist_all[:, None] / speed
+        tau = t[None, :] + v.meridian_distance(lats, 47.5)[:, None] / speed
         Z = np.sin(2 * np.pi * (tau - tc) / T) * np.exp(-((tau - tc) / (1.5 * T)) ** 2)
         X = v.bandpass(Z, cfg.time_step_s, cfg)
-        for name, (lo, hi) in (("array_20deg", (37.5, 57.5)), ("subarray_10deg", (42.5, 52.5))):
-            rows = (lats >= lo - 1e-6) & (lats <= hi + 1e-6)
-            dist = v.meridian_distance(lats[rows], 0.5 * (lo + hi))
-            S, _ = v.slant_stack(X[rows], dist, p_fine, cfg.time_step_s, cfg)
-            s = S[:, int(np.argmin(np.abs(t - tc)))]
-            k = int(np.argmax(s))
-            a = b = k
-            while a > 0 and s[a - 1] >= 0.5 * s[k]:
-                a -= 1
-            while b < len(s) - 1 and s[b + 1] >= 0.5 * s[k]:
-                b += 1
-            out[f"{speed}_m_s_{name}"] = {
-                "peak_speed_m_s": round(1 / p_fine[k]),
-                "fwhm_s_per_km": round(float(p_fine[b] - p_fine[a]) * 1e3, 2),
-                # a == 0: the peak is still above half maximum at the fastest speed tried
-                "speed_range_m_s": [round(1 / p_fine[b]), None if a == 0 else round(1 / p_fine[a])]}
+        S, _ = v.slant_stack(X[rows], dist, p_fine, cfg.time_step_s, cfg)
+        s = S[:, int(np.argmin(np.abs(t - tc)))]
+        k = int(np.argmax(s))
+        a = b = k
+        while a > 0 and s[a - 1] >= 0.5 * s[k]:
+            a -= 1
+        while b < len(s) - 1 and s[b + 1] >= 0.5 * s[k]:
+            b += 1
+        out[f"{speed}_m_s_subarray_10deg"] = {
+            "peak_speed_m_s": round(1 / p_fine[k]),
+            "fwhm_s_per_km": round(float(p_fine[b] - p_fine[a]) * 1e3, 2),
+            # None: the half maximum reaches infinite speed (p <= 0)
+            "speed_range_m_s": [round(1 / p_fine[b]), None if p_fine[a] <= 0 else round(1 / p_fine[a])]}
     return out
 
 
@@ -164,27 +167,6 @@ def density(n_boot=2000, seed=0):
     out["median_observations_per_day_1e6"] = {
         int(y): round(float(np.median(cov["n_observations"].to_numpy()[yrs == y])) / 1e6, 1) for y in range(2015, 2026)}
     return out
-
-
-# ── trains overlapping in time ──────────────────────────────────────────────────
-
-def overlap(min_overlap_s=1800):
-    """Share of trains that overlap another train by more than min_overlap_s."""
-    tr = pl.read_parquet(ROOT / "results/vespagram/trains.parquet").sort("t_start")
-
-    def share(g):
-        ts = g["t_start"].dt.epoch("s").to_numpy()
-        te = g["t_end"].dt.epoch("s").to_numpy()
-        hit = np.zeros(len(ts), bool)
-        for i in range(len(ts)):
-            j = i + 1
-            while j < len(ts) and ts[j] < te[i]:
-                if min(te[i], te[j]) - ts[j] > min_overlap_s:
-                    hit[i] = hit[j] = True
-                j += 1
-        return round(100 * float(hit.mean()), 1)
-    return {"min_overlap_min": min_overlap_s / 60, "all_trains_pct": share(tr),
-            "high_medium_among_themselves_pct": share(tr.filter(pl.col("confidence") != "low"))}
 
 
 # ── empty keogram cells ─────────────────────────────────────────────────────────
@@ -269,7 +251,8 @@ def main():
     cfg = v.VespaConfig()
     N = json.loads(NUMBERS.read_text(encoding="utf-8")) if NUMBERS.exists() else {}
     out = N.get("method_checks", {})
-    out.update(passband=passband(cfg), resolution=resolution(cfg), density=density(), overlap=overlap())
+    out.update(passband=passband(cfg), resolution=resolution(cfg), density=density())
+    out.pop("overlap", None)                     # trains no longer overlap by construction
     if args.empty_cells:
         out["empty_cells"] = empty_cells(args.workers)
     out.pop("empty_cells_pct_by_day", None)
