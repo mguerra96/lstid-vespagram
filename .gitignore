@@ -11,7 +11,7 @@ __pycache__/
 /paper/numbers.json
 /paper/external/keo/
 
-# large input, released on Zenodo with the data (over GitHub's 100 MB limit)
+# one day of TEC observations (method_checks.py --tec-file), not released
 /paper/external/tec_*.parquet
 
 # downloads the code does not read
