@@ -1,5 +1,6 @@
 __pycache__/
 .claude/
+.venv/
 
 # outputs, rebuilt by the scripts (see rebuild.py); the injection results stay
 /results/*
@@ -24,3 +25,8 @@ __pycache__/
 /paper/manuscript.*
 /paper/build.py
 /paper/OPEN_ITEMS.md
+
+# third-party inputs, fetched by paper/external/download.py (see its docstring)
+/paper/external/hfint/
+/paper/external/LSTID_ROI*
+/paper/figures/data/SN_m_tot_V2.0.csv

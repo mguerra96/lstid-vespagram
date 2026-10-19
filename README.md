@@ -1,249 +1,141 @@
-# LSTID identification in TEC keograms
+# LSTID catalogue from GNSS TEC keograms over Europe
 
-Detection and characterisation of large-scale travelling ionospheric disturbances
-(LSTIDs) in GNSS TEC keograms over Europe (37.5–57.5°N; pierce points ≈0–25°E, no
-longitude window), 2015–2025.
+Code of the paper *An eleven-year catalogue of large-scale travelling ionospheric
+disturbances from GNSS TEC over Europe* (Guerra, Cesaroni & Spogli, Scientific Data,
+submitted). It detects equatorward large-scale travelling ionospheric disturbances
+(LSTIDs) in daily GNSS TEC keograms of 37.5–57.5°N, 2015–2025, and produces every number
+and figure of the paper.
 
-**The vespagram catalogue is the default** and is the one to use for climatology,
-driver studies and forecasting. The older ROI catalogue is kept for comparison
-only.
+The catalogue itself (trains, detections, keograms and daily coverage) is on Zenodo:
+*DOI to be added*. The keograms are built from RINEX files by
+[pykeo](https://github.com/mguerra96/pykeo).
 
-| | Vespagram (default) | ROI (legacy) |
+## Method in short
+
+The method is described in full in the paper (Methods). Each latitude row of the keogram
+is treated as one sensor of a north–south array, as in array seismology.
+
+1. **Vespagram.** The keogram is decimated to 0.25° × 2 min and each row is band-passed
+   to 25–200 min. For three 10° sub-arrays (37.5–47.5, 42.5–52.5 and 47.5–57.5°N) and
+   45 equatorward trial slownesses, the rows are delay-and-summed in a 30-min window,
+   giving the **semblance** *S* (0–1, independent of amplitude) and the **beam RMS**
+   (TECu).
+2. **Ridge pixels.** Local maxima of *S* along slowness with *S* ≥ 0.6, beam RMS ≥
+   0.01 TECu and speed 300–1500 m/s; slowness refined by a parabola through the peak.
+3. **Detections.** Ridge pixels joined across consecutive time steps (at most three
+   slowness steps apart); a ridge lasting ≥ 45 min is a detection.
+4. **Trains.** Detection times are moved to 47.5°N. A detection starting less than
+   60 min after the end of the current train joins it; a train needs at least one crest
+   and one trough. Trains never overlap. Each day is processed with 12 h of padding,
+   and a train crossing midnight belongs to the day of its midpoint.
+5. **Speed** = 1 / semblance-weighted mean slowness of all the train's ridge pixels;
+   the speed interval is the weighted 16th–84th percentile range.
+6. **Confidence score** *C* = (*S* − 0.6) / 0.4 × coverage, with *S* the mean semblance
+   of the ridge pixels and coverage the mean share of the three sub-arrays with a
+   detection running. Levels: high *C* ≥ 0.35, medium 0.20 ≤ *C* < 0.35, low below. Use
+   **high + medium** for science and forecasting; low is a flag, not a rejection.
+
+Poleward propagation is not searched. The parameters are in `VespaConfig`
+(`vespagram.py`) and in Table 1 of the paper.
+
+## Outputs
+
+`python vespagram.py all` writes to `results/vespagram/`:
+
+| File | Content |
+|---|---|
+| `release/trains.{parquet,csv}` | the published train catalogue (columns: Table 2 of the paper) |
+| `release/detections.{parquet,csv}` | the published detection catalogue (Table 3) |
+| `trains.parquet`, `detections.parquet` | the same with the extra columns the analyses use (semblance, coverage, number of detections, slowness, ...) |
+
+Trains and detections are joined on (`date`, `train_id`). All times are UTC. Train
+times are at 47.5°N; detection times, crests and troughs are at the centre of their
+sub-array.
+
+## Installation and inputs
+
+Python 3.11 with the pinned packages:
+
+```bash
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt        # Linux/macOS: .venv/bin/pip
+```
+
+The input folders are set in `paths.py`; override them with environment variables:
+
+| Variable | Content | Needed by |
 |---|---|---|
-| Pipeline | `vespagram.py` | `detect_roi.py` |
-| Catalogue | `results/vespagram/trains.parquet` (+ `detections.parquet`) | `results/roi/lstid_rois.pkl` |
-| Unit | one record per wave **train** | one record per **front** |
-| Size | 6,788 equatorward trains | 10,296 fronts (2,541 trains) |
-| Hours with an LSTID present | 15.3 % (high+medium), 21.7 % (all tiers) | 9.3 % |
+| `KEO_DIR` | daily keograms `keogram_grid_YYYY-MM-DD.parquet` (Zenodo record) | everything |
+| `FEATURES` | 1-min table of geomagnetic and solar-wind drivers (Hp30, SYM-H, SME, IMAGE IE, OMNI, F10.7) | driver analysis, injection test (quiet days), Fig. 3 |
+| `TEC_DIR` | daily TEC observation files from pykeo (not released, ~0.9 TB) | `daily_coverage.py`, empty-cell checks |
 
-## Method (vespagram)
-
-Each latitude row of the keogram is treated as one sensor of a north–south array,
-as in seismology. The keogram is decimated to 0.25° × 2 min and band-passed to
-25–200 min. For each trial slowness *p* = 1/speed, the rows are delay-and-summed,
-giving:
-
-- **semblance** *S*(t, p), a 0–1 coherence measure that does not depend on amplitude;
-- **beam RMS**, the amplitude of the stacked wave in TECu.
-
-1. **Arrays.** The full aperture (37.5–57.5°N) plus five overlapping 10° bands
-   in 2.5° steps.
-2. **Detections.** Ridges of *S* along *p* with *S* ≥ 0.6, beam RMS ≥ 0.01 TECu,
-   duration ≥ 45 min and 250 ≤ |v| ≤ 2000 m/s. The ridge slowness is refined
-   below the grid step (parabola through the semblance peak), so speeds are not
-   tied to the slowness grid.
-3. **Trains.** Detections from different arrays are linked when their waveforms
-   correlate (r ≥ 0.8) where the arrays overlap.
-   - Two detections of the same array that overlap in time are distinct waves
-     and never end up in one train. The full array also keeps apart consecutive
-     detections whose speeds differ by more than it can resolve; a 10° band
-     cannot, so a front whose speed changes over time stays one train.
-   - LSTID trains of the same direction that still overlap in time are merged
-     into one train (`merge_simultaneous`): over this array there are no two
-     simultaneous LSTID trains.
-   - Detections propagating in opposite directions are never linked.
-   - A train then extends into neighbouring bands that line up with it but had no
-     ridge of their own.
-4. **Kept.** Only LSTIDs (300–1500 m/s, period ≥ 30 min) propagating
-   **equatorward**.
-   - Trains seen by a single band are excluded: two blind audits found most of
-     them were not LSTIDs.
-   - Poleward trains are excluded: they showed no auroral-driver dependence and
-     peak at dawn in summer. Set `directions` in `VespaConfig` to bring them back.
-5. **Midnight.** Each day is processed with 12 h of padding from its neighbours,
-   so the day that owns a train (midpoint inside it) sees the whole train.
-   Trains crossing midnight are settled across days (`resolve_day_boundaries`),
-   so each wave is catalogued exactly once. If the two days link a wave
-   differently and both own a version, the longer one is kept.
-
-### Confidence (`confidence_score` and `confidence` columns)
-
-Each train has a score between 0 and 1, coherence times persistence:
-
-    score = (semblance - 0.6) / 0.4 * (1 - exp(-n_cycles / 2))
-
-where `n_cycles` is the train's duration divided by its period. The score does
-not use the amplitude (which follows background TEC and the drivers) or the
-latitudinal extent: in strong storms the source region moves inside the array,
-so a clear train cannot span the full 20°.
-
-| Tier | Rule | Trains |
-|---|---|---|
-| high | score ≥ 0.40 | 2,524 |
-| medium | 0.30 ≤ score < 0.40 | 1,427 |
-| low | score < 0.30 | 2,837 |
-
-Trains slower than 350 m/s drop one tier: just above the 300 m/s limit they mix
-with slower medium-scale TIDs. Use **high+medium** for science and forecasting,
-and keep low as a flag rather than deleting it.
-
-The thresholds are where agreement with the published ROI catalogue (2021–2024)
-changes: below 0.30 trains match it no more often than by chance, above 0.40
-nearly three times as often. Independent checks of the tiers are the HF-INT
-catalogue and the dependence on auroral activity. The score is an ordering, not
-a calibrated probability. The earlier
-rule (high = detected by the full 20° array) tracked both reference catalogues
-and Hp30 less well, and latitudinal extent was the weakest predictor of all.
-
-### Catalogue columns (`trains.parquet`)
-
-**Timing**
-
-| Column | Meaning |
-|---|---|
-| `date` | processing day the train is filed under |
-| `train_id` | train number within that day |
-| `t_start`, `t_end` | train start and end (UTC) |
-| `owned` | `False` for a midnight-crossing train kept from the neighbouring day's view (its midpoint is on the adjacent day) |
-
-**Wave properties**
-
-| Column | Meaning |
-|---|---|
-| `speed_m_s`, `slowness` | propagation speed; slowness *p* > 0 means equatorward. Semblance-weighted median of the ridge slowness, from the full array if it saw the train, otherwise from the bands |
-| `speed_lo_m_s`, `speed_hi_m_s` | 16th–84th percentile range of the ridge speed over the train. In the injection test it contains the true speed 74 % of the time. For a `curved` train seen by the full array it also covers the same range of the band ridges: the full array fits one slope to a front that bends, so its own range is narrow but says nothing of the speeds along the front |
-| `period_min`, `wavelength_km` | wave period and wavelength |
-| `amplitude` | equivalent peak amplitude, √2 × RMS of the stacked beam over each detection, maximum over the train's detections [TECu] |
-| `semblance` | maximum semblance over the train's detections |
-| `n_cycles` | duration divided by period |
-| `confidence_score` | confidence score, 0–1, see above |
-| `confidence` | tier, see above |
-| `direction` | always `equatorward` in the current catalogue |
-
-**Extent and geometry**
-
-| Column | Meaning |
-|---|---|
-| `lat_lo`, `lat_hi` | latitude extent, including extended bands |
-| `full_array` | the full array detected the train |
-| `n_bands` | bands the train covers, including extended ones |
-| `n_bands_picked` | bands with their own ridge |
-| `geometry` | `planar`, or `curved` when band speeds differ by more than 1.5× |
-| `speed_ratio` | fastest / slowest band speed |
-| `profile_lat`, `profile_speed` | speed against latitude, one value per band |
-
-`detections.parquet` holds the per-array detections behind each train, joined on
-(`date`, `train_id`). Its columns include the crest and trough times.
+Third-party reference data are not redistributed here. `python
+paper/external/download.py` fetches the SILSO sunspot number and the published ROI
+catalogue, and its docstring explains the two steps that cannot be scripted (the HF-INT
+catalogue, behind bot protection on CORA, and the MATLAB export of the published ROI
+catalogue).
 
 ## How to run
 
-Python 3.11 with the packages of `requirements.txt` (on the author's machine:
-`ionoring-test/iono-ring-env`). The input folders are set in `paths.py`; to use
-other folders set the environment variables `KEO_DIR` (daily keogram grids),
-`FEATURES` (1-min driver table) and `TEC_DIR` (daily TEC files, only for the
-coverage table and the empty-cell count).
-
 ```bash
 python test_vespagram.py                          # synthetic checks and the midnight rule (exit code = failures)
-python injection_test.py --summary                # injection-recovery results (drop --summary to rerun, ~15 min)
 python vespagram.py 2024-05-11                    # one day: figure + CSV in results/vespagram/
-python vespagram.py all --no-plot --workers 12    # full catalogue (~30 min): trains and detections, .parquet and .csv
-python rebuild.py                                 # the catalogue and everything derived from it, in order
+python vespagram.py all --no-plot --workers 12    # full catalogue (~6 min with 12 workers)
+python rebuild.py                                 # catalogue and everything derived from it, in order
 python rebuild.py --list                          # the steps of rebuild.py
+python injection_test.py --summary                # summary of the saved injection test (drop --summary to rerun, ~15 min)
 python daily_coverage.py                          # daily coverage table from the TEC files
-python paper/method_checks.py --tec-file paper/external/tec_2024-08-12.parquet   # also the empty keogram cells of that day
 ```
 
-Only a run over `all` days with no failed day writes `trains.parquet`; any other
-run writes `trains_<selector>.parquet` or `trains_partial.parquet` (the same
-holds for `detect_roi.py` and `lstid_rois.pkl`). The catalogue rows are sorted
-by start time. After a new catalogue, use `rebuild.py`: the later steps read the
-files of the earlier ones (`catalogue_records.py` → `compare_climatology.py` →
-`ratio_climatology.py` → `paper_numbers.py` → `validate_published.py` →
-`validate_hfint.py` → `method_checks.py` → `make_figures.py`).
+Only a run over `all` days with no failed day writes `trains.parquet` and the release
+files; any other run writes `trains_<selector>.parquet` or `trains_partial.parquet`.
 
-**Analysis** (`analysis/`). The scripts default to the vespagram high+medium
-records and write to `results/vespagram/climatology/`. Pass
-`--pkl results/roi/lstid_trains.pkl` (or `lstid_hours.pkl`) to run them on
-the ROI catalogue.
+`rebuild.py` runs, in order: the tests, the catalogue, `analysis/catalogue_records.py`,
+the injection test, `analysis/compare_climatology.py`, `analysis/ratio_climatology.py`,
+and the paper scripts `paper_numbers.py`, `validate_published.py`, `validate_hfint.py`,
+`confidence_tiers.py`, `method_checks.py` (all writing `paper/numbers.json`) and
+`make_figures.py`.
 
-- **Per train:**
-  - `climatology.py`: hour, month and year distributions;
-  - `characteristics_temporal.py`: wave characteristics by year and UT hour;
-  - `driver_characteristics.py`: wave characteristics against driver activity.
-- **Per LSTID-active hour:**
-  - `driver_activity.py`: occurrence against driver levels;
-  - `driver_regression.py`: confounder-adjusted logistic model, one driver at a time;
-  - `driver_lag.py`: response delay.
-- **ROI vs vespagram comparison**, written to `results/climatology_compare/`:
-  - `compare_climatology.py`: shares of hours, driver effects and tiers;
-  - `ratio_climatology.py`: vespagram/ROI ratio against activity, solar cycle,
-    UT and month.
+## Repository layout
 
-**Inspection sheets**, plots only:
-
-- `inspect_confidence.py`: random trains per confidence tier.
-- `storm_overview.py`: the two strongest storms per year.
-  - `--random 40` instead draws random days.
-- `quiet_check.py`: quiet-time trains, comparing those found only by the
-  vespagram with those also found by ROI.
-- `compare.py`: side-by-side ROI vs vespagram examples.
-
-The rule that merges ROI fronts into trains (`TRAIN_GAP`, 60 min) and the rule
-that matches trains of two catalogues (`MATCH_TOL`, 15 min) are defined once, in
-`analysis/catalogue_records.py`. All drivers come from the quality-controlled
-feature table, through `analysis/driver_regression.py`.
+| Path | Content |
+|---|---|
+| `vespagram.py` | the detector |
+| `test_vespagram.py` | synthetic tests of the detector |
+| `injection_test.py` | injection-recovery test; results in `results/vespagram/injection/` |
+| `detect_roi.py` | the earlier image-based detector (ROI detector), adapted to the present keograms, used for comparison only |
+| `analysis/` | record files of both catalogues, climatology, driver regressions, ROI vs vespagram comparison |
+| `paper/` | scripts behind every number (`numbers.json`) and figure of the paper |
+| `daily_coverage.py` | daily coverage table released with the data |
+| `inspect_confidence.py`, `storm_overview.py`, `quiet_check.py`, `compare.py` | inspection sheets (plots only) |
+| `paths.py` | input folders |
 
 ## Injection test
 
-`injection_test.py` adds wave packets of known speed, period and amplitude to 132
-real quiet-day keograms (2,592 injections) and runs the detector. Results are in
-`results/vespagram/injection/` (`summary.txt`). In short:
-
-- **Detection.** About half of the waves are found at 0.02 TECu, 80–100 % at
-  0.05 TECu and nearly all at 0.1 TECu. Close to the 1500 m/s limit it is harder
-  (67 % at 0.05 TECu for 1400 m/s).
-- **Speed.** Unbiased, within about ±4 % for high-confidence trains and for
-  trains detected by the full array. Band-only trains scatter much more (one in
-  three off by more than 20 %) and weak waves above 1100 m/s read 8–14 % slow.
-- **Speed interval.** `speed_lo_m_s`–`speed_hi_m_s` contains the true speed 74 %
-  of the time (68 % expected).
-- **Amplitude** reads about 20 % below the injected peak for strong waves (it is
-  an average over the packet). **Period** is within 3 %.
-- **Geometry.** 14 % of planar waves are labelled `curved`.
-- **Confined waves** (37.5–50°N): found, speed unbiased, 71 % high confidence;
-  the catalogued northern edge overshoots by about one 2.5° step.
-
-Limits: single planar packets at constant speed, quiet-day backgrounds, and the
-packet is added after the arc-level detrending, so that filter is not tested.
+`injection_test.py` adds 2,592 wave packets of known speed (350–1400 m/s), period
+(40–70 min) and amplitude (0.01–0.1 TECu) to 132 quiet-day keograms and runs the
+detector unchanged. About two thirds of the 0.02 TECu packets and nearly all those of
+0.05 TECu or more are found. Speeds are within a few per cent up to 800 m/s and about
+15% too low at 1400 m/s. The full tables are in `results/vespagram/injection/summary.txt`.
 
 ## Known limitations
 
-- **Period passband.** Detrending (90-min Savitzky–Golay), the 10-min mean and the
-  band-pass together pass a narrow band: peak at 42 min, half power at 32–57 min,
-  amplitude down to 50 % at 70 min and 9 % at 2 h. Longer-period LSTIDs are
-  strongly under-represented and the period distribution reflects this band.
-- **Solar-cycle sensitivity.** At the same Hp30, occurrence follows solar flux
-  (0.5 high+medium hours per day in 2019 against 3.0 in 2024 for Hp30 1–2): wave
-  amplitude in TECu scales with background TEC and the detector has a fixed
-  0.01 TECu floor. Observation density is not the cause: days that lose a fifth
-  of their observations show no change (within ±11 %).
-- **Speed resolution.** The speed of a single train is precise to a few percent
-  (see the injection test), but two waves present at the same time are separated
-  only if their speeds differ a lot: for a 55-min wave at 600 m/s the semblance
-  peak is above half maximum from 430 to 1010 m/s on the full array and from 330
-  to 3000 m/s on a 10° band.
-- **Speed limits.**
-  - Waves slower than 300 m/s are not LSTIDs by definition. These include the
-    large daytime waves on quiet winter days, at about 200–270 m/s.
-  - The steepest storm-time fronts, faster than 1500 m/s or nearly simultaneous
-    across latitudes, are rejected. Whether that cuts off real storm LSTIDs is
-    still open.
-- **Simultaneous waves.** By definition there is one train at a time: a slow
-  wave in the south and a fast one in the north at the same time are one
-  "curved" train, and two simultaneous waves are one train whose speed is that of
-  the dominant one, with a wide speed interval. For a curved train `speed_m_s`
-  can be the speed of neither wave (500 m/s in the south and 1000 m/s in the
-  north read 1430 m/s in the synthetic test): use the interval and the
-  speed–latitude profile.
-- **Quiet-time agreement with ROI.** The vespagram finds about 1.1× ROI's LSTID
-  hours in storms but about 3× in quiet conditions (high+medium). Quiet-time trains
-  found only by the vespagram look like real but weaker LSTIDs: median amplitude
-  0.024 vs 0.037 TECu. Quiet-time occurrence is therefore method-dependent.
-- **Data coverage changes over the years.** 2015 receivers lacked BeiDou and
-  Galileo. No effect of observation density on the counts was found (see
-  solar-cycle sensitivity).
-- **Not real-time as is.** The band-pass filter runs forward and backward in
-  time, and each day uses 12 h of the following day. An operational forecast needs
-  a version that only uses past data. The offline catalogue is fine as training
-  labels.
+- **Passband.** The detrending of the arcs and the band-pass together pass mainly
+  periods of 30–70 min (half power 32–57 min); LSTIDs of 2 h or more are
+  under-represented.
+- **Speed.** The speed is the apparent meridional phase speed; obliquely propagating
+  fronts appear faster. Speeds above about 1000 m/s are underestimated (about 15% at
+  1400 m/s). Waves slower than 300 m/s or faster than 1500 m/s are not catalogued.
+- **Solar-cycle sensitivity.** Amplitudes in TECu scale with the background TEC, and
+  detection has a fixed 0.01 TECu floor, so at the same geomagnetic activity more trains
+  are found at high solar activity. The growth in the number of observations
+  (Galileo, BeiDou) has no measurable effect.
+- **One train at a time.** Simultaneous waves of different speed in one sub-array come
+  out as one train at an intermediate speed with a wide speed interval.
+- **Offline.** The band-pass is zero-phase and each day uses 12 h of the next day; an
+  operational detector would need a causal version.
+
+## Licence and citation
+
+Code: MIT licence, © 2026 Istituto Nazionale di Geofisica e Vulcanologia (INGV).
+Data: CC BY 4.0 (Zenodo record). Please cite the paper and the Zenodo record.
