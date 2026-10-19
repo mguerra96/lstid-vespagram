@@ -30,7 +30,7 @@ from matplotlib.patches import Patch
 import vespagram as v
 from detect_roi import discover_dates
 from inspect_confidence import draw_train, TIERS, ROOT
-from paths import FEATURES
+from supermag import read_features
 
 VMIN_SCALE = 0.06    # colour scale is max(this, 98th percentile of |X| in the day) [TECu]
 
@@ -130,7 +130,7 @@ def main(argv=None):
     ap.add_argument("--per-sheet", type=int, default=6)
     args = ap.parse_args(argv)
 
-    features = pl.read_parquet(FEATURES, columns=["time", "sym_h", "sme", "hp30"])
+    features = read_features(["time", "sym_h", "sme", "hp30"])
     stats = daily_stats(features)
     if args.random:
         out, days = ROOT / "results/vespagram/random_days", random_days(stats, args.random, args.seed)

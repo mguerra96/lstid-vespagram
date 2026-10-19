@@ -50,7 +50,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from paths import FEATURES
+from supermag import read_features
 
 ROLLING_HOURS = 3    # trailing window for the driver average
 GRID_MINUTES  = 60   # cadence of the regular time grid LSTID ref_times are snapped to
@@ -100,7 +100,7 @@ def load_records(pkl_path):
 @functools.lru_cache(maxsize=None)
 def _feature(col):
     """One column of the feature table with its time, sorted by time (read once)."""
-    return pl.read_parquet(FEATURES, columns=["time", col]).sort("time")
+    return read_features(["time", col]).sort("time")
 
 
 def _load_driver_series(name):

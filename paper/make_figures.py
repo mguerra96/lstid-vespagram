@@ -38,6 +38,7 @@ sys.path.insert(0, str(ROOT))
 import vespagram as v
 from detect_roi import Config as RoiConfig, load_grid
 from paths import FEATURES
+from supermag import read_features
 
 OUT      = HERE / "figures"
 DATA     = OUT / "data"
@@ -440,7 +441,7 @@ CASES = [("a", pd.Timestamp("2024-08-11 12:00"), pd.Timestamp("2024-08-13 00:00"
 
 def fig4():
     tr, de = catalogue(), detections()
-    drv = pl.read_parquet(FEATURES, columns=["time", "sym_h", "sme"]).to_pandas().set_index("time")
+    drv = read_features(["time", "sym_h", "sme"]).to_pandas().set_index("time")
     drv.index = drv.index.tz_localize(None)
 
     fig = plt.figure(figsize=(WIDE, 225 * MM))
