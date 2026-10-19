@@ -61,13 +61,25 @@ python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt        # Linux/macOS: .venv/bin/pip
 ```
 
-The input folders are set in `paths.py`; override them with environment variables:
+Download the Zenodo record and put its inputs in `data/`:
 
-| Variable | Content | Needed by |
+```
+data/keograms/keogram_grid_YYYY-MM-DD.parquet    unzip keograms_2015.zip ... keograms_2025.zip here
+data/drivers_1min.parquet                         1-min drivers: Hp30, SYM-H, IMAGE, OMNI, F10.7, SZA
+```
+
+Other locations can be set with environment variables (`paths.py`):
+
+| Variable | Default | Needed by |
 |---|---|---|
-| `KEO_DIR` | daily keograms `keogram_grid_YYYY-MM-DD.parquet` (Zenodo record) | everything |
-| `FEATURES` | 1-min table of geomagnetic and solar-wind drivers (Hp30, SYM-H, SME, IMAGE IE, OMNI, F10.7) | driver analysis, injection test (quiet days), Fig. 3 |
-| `TEC_DIR` | daily TEC observation files from pykeo (not released, ~0.9 TB) | `daily_coverage.py`, empty-cell checks |
+| `KEO_DIR` | `data/keograms` | everything |
+| `FEATURES` | `data/drivers_1min.parquet` | driver analysis, injection test (quiet days), Figs. 3, 4, 6 |
+| `TEC_DIR` | `data/tec` | `daily_coverage.py`, empty-cell checks (pykeo TEC files, not released, ~0.9 TB) |
+
+The SuperMAG indices (SME, SML, SMU) may not be redistributed. The first script that
+needs them asks for your SuperMAG username (free registration at
+https://supermag.jhuapl.edu, or set `SUPERMAG_USERID`), downloads them and adds them to
+the driver table (`supermag.py`; run `python supermag.py` to do it beforehand).
 
 Third-party reference data are not redistributed here. `python
 paper/external/download.py` fetches the SILSO sunspot number and the published ROI
@@ -107,7 +119,8 @@ and the paper scripts `paper_numbers.py`, `validate_published.py`, `validate_hfi
 | `analysis/` | record files of both catalogues, climatology, driver regressions, ROI vs vespagram comparison |
 | `paper/` | scripts behind every number (`numbers.json`) and figure of the paper |
 | `daily_coverage.py` | daily coverage table released with the data |
-| `inspect_confidence.py`, `storm_overview.py`, `quiet_check.py`, `compare.py` | inspection sheets (plots only) |
+| `supermag.py` | downloads the SuperMAG indices into the driver table |
+| `tools/` | inspection sheets and the ROI vs vespagram comparison (plots; `quiet_check.py` also feeds `paper_numbers.py`) |
 | `paths.py` | input folders |
 
 ## Injection test

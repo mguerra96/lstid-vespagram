@@ -30,3 +30,6 @@ __pycache__/
 /paper/external/hfint/
 /paper/external/LSTID_ROI*
 /paper/figures/data/SN_m_tot_V2.0.csv
+
+# inputs (Zenodo record), see paths.py
+/data/
