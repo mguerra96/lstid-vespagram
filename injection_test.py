@@ -11,7 +11,7 @@ found, how accurate the catalogued speed is, and whether the speed interval
 Quiet days: no catalogued train overlapping the day, daily-mean Hp30 < 1.5,
 spread evenly over the years. One packet per run of the detector.
 
-Limits: single planar packets at constant speed; periods inside the passband;
+Limits: single plane-wave packets at constant speed; periods inside the passband;
 quiet-day backgrounds only; the packet is added after the arc-level detrending,
 so the detrending filter is not tested.
 
@@ -98,8 +98,7 @@ def run_day(job):
             rec.update(r_speed=r["speed_m_s"], r_lo=r["speed_lo_m_s"], r_hi=r["speed_hi_m_s"],
                        r_period=r["period_s"] / 60, r_amp=r["amplitude"], r_semb=r["semblance"],
                        r_cycles=r["n_cycles"], r_score=r["confidence_score"], r_conf=r["confidence"],
-                       r_lat_lo=r["lat_lo"], r_lat_hi=r["lat_hi"], r_full=r["full_array"],
-                       r_geom=r["geometry"], r_start=r["t_start_s"], r_end=r["t_end_s"])
+                       r_cover=r["coverage"], r_start=r["t_start_s"], r_end=r["t_end_s"])
         out.append(rec)
     return out, None
 
@@ -165,7 +164,7 @@ def summarise():
           "\n  '16-84%': the range that holds the central 68% of the cases, i.e. the typical scatter."
           "\n  '|error| > 20%': fraction of waves whose catalogued speed is off by more than 20%."
           "\n\nLimits"
-          "\n  Single planar waves at constant speed, on quiet days only. The wave is added after the"
+          "\n  Single plane waves at constant speed, on quiet days only. The wave is added after the"
           "\n  arc-level detrending, so the loss of long periods in that filter is not tested here.\n")
     print(f"{d.height} injections into {d['day'].n_unique()} quiet days; trains on those days without "
           f"any injection: {d.group_by('day').agg(pl.col('n_base').first())['n_base'].sum()}")
@@ -182,15 +181,16 @@ def summarise():
     print("\n2. Recovered / true speed of the detected full-extent waves")
     for c in ("high", "medium", "low"):
         print(f"   {c:20s} {_ratio(fd.filter(pl.col('r_conf') == c))}")
-    for c, nm in ((True, "full-array detection"), (False, "sub-arrays only")):
-        print(f"   {nm:20s} {_ratio(fd.filter(pl.col('r_full') == c))}")
+    for c, nm in ((True, "coverage >= 2/3"), (False, "coverage < 2/3")):
+        print(f"   {nm:20s} {_ratio(fd.filter((pl.col('r_cover') >= 2 / 3) == c))}")
     for sp in SPEEDS:
         print(f"   {sp:5d} m/s, amp>=0.03 {_ratio(fd.filter((pl.col('speed') == sp) & (pl.col('amp') >= 0.03)))}")
 
     print("\n3. Share of detected waves whose true speed lies inside [speed_lo_m_s, speed_hi_m_s] (a 16-84% range: expect 0.68)")
     for nm, g in (("all", det), ("high", det.filter(pl.col("r_conf") == "high")),
                   ("medium", det.filter(pl.col("r_conf") == "medium")), ("low", det.filter(pl.col("r_conf") == "low")),
-                  ("full-array detection", det.filter(pl.col("r_full"))), ("sub-arrays only", det.filter(~pl.col("r_full")))):
+                  ("coverage >= 2/3", det.filter(pl.col("r_cover") >= 2 / 3)),
+                  ("coverage < 2/3", det.filter(pl.col("r_cover") < 2 / 3))):
         inside = ((g["speed"] >= g["r_lo"]) & (g["speed"] <= g["r_hi"])).mean()
         half = ((g["r_hi"] - g["r_lo"]) / g["r_speed"] / 2).median()
         err = (g["r_speed"] / g["speed"] - 1).abs().median()
@@ -211,10 +211,9 @@ def summarise():
 
     s = det.filter((pl.col("extent") == "south") & (pl.col("amp") >= 0.03))
     g = fd.filter(pl.col("amp") >= 0.03)
-    print(f"\n6. Waves confined to 37.5-50 N, amp >= 0.03 TECu: n={s.height}, median catalogued northern edge "
-          f"{s['r_lat_hi'].median()} N, high confidence {float((s['r_conf'] == 'high').mean()):.2f}, "
-          f"speed {_ratio(s)}")
-    print(f"   planar full-extent waves (amp >= 0.03 TECu) labelled curved: {float((g['r_geom'] == 'curved').mean()):.2f}")
+    print(f"\n6. Array coverage, amp >= 0.03 TECu: full-extent waves median {g['r_cover'].median():.2f}; "
+          f"waves confined to 37.5-50 N: n={s.height}, median {s['r_cover'].median():.2f}, "
+          f"high confidence {float((s['r_conf'] == 'high').mean()):.2f}, speed {_ratio(s)}")
 
 
 if __name__ == "__main__":

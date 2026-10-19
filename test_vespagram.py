@@ -1,7 +1,7 @@
 """
 test_vespagram.py
 
-Synthetic checks of detection and train linking: known wave fields are built on
+Synthetic checks of detection and train building: known wave fields are built on
 the same decimated grid the pipeline uses, band-passed, and run through
 vespagram.analyse. Then checks of the rule that settles trains crossing midnight,
 on hand-made train records. Run: python test_vespagram.py (exit code = failures)
@@ -56,10 +56,10 @@ def run(Z, noise=0.005, **overrides):
 
 def describe(trains):
     return "; ".join(f"{t['t_start_s'] / 3600:.1f}-{t['t_end_s'] / 3600:.1f}h "
-                     f"{t['direction'][:3]} {t['speed_m_s']:.0f} m/s "
-                     f"[{t['speed_lo_m_s']:.0f}-{t['speed_hi_m_s']:.0f}] {t['period_s'] / 60:.0f} min "
-                     f"lat {t['lat_lo']}-{t['lat_hi']} {t['geometry']} {t['confidence']} "
-                     f"(bands {t['n_bands_picked']}/{t['n_bands']})" for t in trains) or "none"
+                     f"{t['speed_m_s']:.0f} m/s [{t['speed_lo_m_s']:.0f}-{t['speed_hi_m_s']:.0f}] "
+                     f"{t['period_s'] / 60:.0f} min, cover {t['coverage']:.2f}, "
+                     f"{t['n_crests']}/{t['n_troughs']} crests/troughs, "
+                     f"score {t['confidence_score']:.2f} {t['confidence']}" for t in trains) or "none"
 
 
 CASES = {
@@ -67,52 +67,44 @@ CASES = {
     "plane 600 m/s": (
         packet(12 * 3600, 3600, 0.05, plane(600)),
         lambda tr: len(tr) == 1 and abs(tr[0]["speed_m_s"] - 600) < 60
-                   and tr[0]["geometry"] == "planar" and tr[0]["confidence"] == "high"),
-    "curved 400 N -> 1000 S": (
+                   and tr[0]["coverage"] > 0.9 and tr[0]["confidence"] == "high"),
+    # one cycle only: a clear wave crossing the whole array scores high however
+    # short it is (the score has no duration term)
+    "single cycle 600 m/s": (
+        packet(12 * 3600, 3600, 0.05, plane(600), width_s=1800),
+        lambda tr: len(tr) == 1 and tr[0]["n_crests"] >= 1 and tr[0]["n_troughs"] >= 1
+                   and tr[0]["confidence"] == "high"),
+    "curved 400 N -> 1000 S: one train between the two speeds": (
         packet(12 * 3600, 3600, 0.05, curved(400, 1000)),
-        lambda tr: len(tr) == 1 and tr[0]["geometry"] == "curved"
-                   and tr[0]["speed_lo_m_s"] <= 600 and tr[0]["speed_hi_m_s"] >= 800),
-    "poleward 500 m/s (dropped: equatorward-only catalogue)": (
+        lambda tr: len(tr) == 1 and 400 < tr[0]["speed_m_s"] < 1000),
+    "poleward 500 m/s: not catalogued": (
         packet(12 * 3600, 3600, 0.05, plane(-500)),
         lambda tr: len(tr) == 0),
-    "poleward 500 m/s, poleward kept": (
-        packet(12 * 3600, 3600, 0.05, plane(-500)),
-        lambda tr: len(tr) == 1 and tr[0]["direction"] == "poleward",
-        {"directions": ("equatorward", "poleward")}),
-    "north-only 450 m/s (47.5-57.5)": (
+    # outside the LSTID window: the flank of the ridge must not be picked at the
+    # window edge
+    "slow 200 m/s: not catalogued": (
+        packet(12 * 3600, 3600, 0.05, plane(200)),
+        lambda tr: len(tr) == 0),
+    "near-vertical 4000 m/s: not catalogued": (
+        packet(12 * 3600, 3600, 0.05, plane(4000)),
+        lambda tr: len(tr) == 0),
+    "north-only 450 m/s (47.5-57.5): one train, partial coverage": (
         packet(12 * 3600, 3600, 0.05, plane(450), lat_mask=lambda la: la >= 47.5),
-        lambda tr: len(tr) == 1 and tr[0]["lat_lo"] >= 42.5),
-    # simultaneous LSTID trains are one train by definition (merge_simultaneous)
-    "two simultaneous, 400 and 1200 m/s, same period: one train": (
+        lambda tr: len(tr) == 1 and tr[0]["coverage"] < 0.8),
+    # no two simultaneous LSTID trains over this array: one train by definition
+    "two simultaneous, 400 and 1200 m/s: one train": (
         packet(12 * 3600, 3600, 0.05, plane(400)) +
         packet(12 * 3600 + 900, 3600, 0.05, plane(1200)),
         lambda tr: len(tr) == 1),
-    "two simultaneous, kept apart without merge_simultaneous": (
-        packet(12 * 3600, 3600, 0.05, plane(400)) +
-        packet(12 * 3600 + 900, 3600, 0.05, plane(1200)),
-        lambda tr: len(tr) == 2,
-        {"merge_simultaneous": False}),
-    # two packets at different speeds one after the other, not overlapping in
-    # time: two trains (packets closer than this overlap and are merged)
-    "consecutive 500 then 1200 m/s, 5 h apart": (
-        packet(9 * 3600, 3600, 0.05, plane(500)) +
-        packet(14 * 3600, 3600, 0.05, plane(1200)),
-        lambda tr: len(tr) == 2),
-    # a slow wave in the south and a fast one in the north at the same time: one
-    # 'curved' train (formerly a known limitation; one train by definition now)
-    "500 S-half + 1000 N-half: one curved train": (
+    "500 S-half + 1000 N-half: one train, interval reaching both": (
         packet(12 * 3600, 3600, 0.05, plane(500), lat_mask=lambda la: la < 47.5) +
         packet(12 * 3600 + 1200, 3600, 0.05, plane(1000), lat_mask=lambda la: la >= 47.5),
-        # no single speed describes it (the full array reads about 1430 m/s): the
-        # speed interval must reach both waves
-        lambda tr: len(tr) == 1 and tr[0]["geometry"] == "curved"
-                   and tr[0]["speed_lo_m_s"] <= 550 and tr[0]["speed_hi_m_s"] >= 1000),
-    # near-vertical front (2500 m/s) tilted poleward in the south half and
-    # equatorward in the north half: never one train mixing both directions
-    "mixed direction, 2500 m/s S-half poleward + N-half equatorward": (
-        packet(12 * 3600, 3600, 0.05, plane(-2500), lat_mask=lambda la: la < 47.5) +
-        packet(12 * 3600, 3600, 0.05, plane(2500), lat_mask=lambda la: la >= 47.5),
-        lambda tr: all(len({np.sign(s) for s in t["profile_speed"]}) <= 1 for t in tr)),
+        lambda tr: len(tr) == 1 and tr[0]["speed_lo_m_s"] <= 600 and tr[0]["speed_hi_m_s"] >= 900),
+    # packets far apart are two trains
+    "consecutive 500 then 1200 m/s, 7 h apart: two trains": (
+        packet(8 * 3600, 3600, 0.05, plane(500)) +
+        packet(15 * 3600, 3600, 0.05, plane(1200)),
+        lambda tr: len(tr) == 2),
     "noise only": (
         np.zeros((len(LATS), len(T))),
         lambda tr: len(tr) == 0),
@@ -124,28 +116,21 @@ CASES = {
 D0, D1 = dt.date(2024, 1, 1), dt.date(2024, 1, 2)
 
 
-def rec(day, train_id, start_h, end_h, owned):
+def rec(day, train_id, start_h, end_h):
     """A train record as one day's run reports it; hours count from 00 UT of D0."""
     t0 = dt.datetime.combine(D0, dt.time())
-    return {"date": day, "train_id": train_id, "owned": owned,
+    return {"date": day, "train_id": train_id,
             "t_start": t0 + dt.timedelta(hours=start_h), "t_end": t0 + dt.timedelta(hours=end_h)}
 
 
 BOUNDARY_CASES = {
     # name: (records of the two days, the (date, train_id) that must stay)
-    "same wave seen from both days: the owner's row stays": (
-        [rec(D0, 1, 22, 25, True), rec(D1, 1, 22, 25, False)], {(D0, 1)}),
-    "wave seen only by the day that does not own it: kept": (
-        [rec(D1, 1, 22.5, 25, False)], {(D1, 1)}),
-    "neither day owns its view of the wave: the longer view stays": (
-        [rec(D0, 1, 23, 26, False), rec(D1, 1, 20, 25, False)], {(D1, 1)}),
-    "each day owns a different version of the wave: the longer stays": (
-        [rec(D0, 1, 21, 24.5, True), rec(D1, 1, 23, 28, True)], {(D1, 1)}),
-    "two waves that overlap, each seen by both days: one row each": (
-        [rec(D0, 1, 20, 24.5, True), rec(D0, 2, 24, 28, False),
-         rec(D1, 1, 20, 24.5, False), rec(D1, 2, 24, 28, True)], {(D0, 1), (D1, 2)}),
-    "waves that do not cross midnight are left alone": (
-        [rec(D0, 1, 3, 6, True), rec(D0, 2, 10, 14, True), rec(D1, 1, 30, 33, True)],
+    "one train claimed by both days in two versions: the longer stays": (
+        [rec(D0, 1, 21, 24.5), rec(D1, 1, 23, 28)], {(D1, 1)}),
+    "trains of adjacent days that do not overlap: both stay": (
+        [rec(D0, 1, 20, 23.5), rec(D1, 1, 24.5, 27)], {(D0, 1), (D1, 1)}),
+    "trains that do not cross midnight are left alone": (
+        [rec(D0, 1, 3, 6), rec(D0, 2, 10, 14), rec(D1, 1, 30, 33)],
         {(D0, 1), (D0, 2), (D1, 1)}),
 }
 

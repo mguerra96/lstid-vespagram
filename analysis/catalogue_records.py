@@ -90,8 +90,7 @@ def roi_trains(pkl=ROI_PKL):
              "period_s":       med(members, "period_s"),
              "peak_amplitude": med(members, "peak_amplitude", lambda v: abs(float(v))),
              "duration_h":     (end - start).total_seconds() / 3600,
-             "n_fronts":       len(members),
-             "direction":      None}
+             "n_fronts":       len(members)}
             for start, end, members in merge_fronts(pickle.load(open(pkl, "rb")))]
 
 
@@ -105,12 +104,7 @@ def vespa_trains(path=VESPA_PQ):
              "period_s":       float(r["period_min"]) * 60,
              "peak_amplitude": float(r["amplitude"]),
              "duration_h":     (r["t_end"] - r["t_start"]).total_seconds() / 3600,
-             "direction":      r["direction"],
-             "confidence":     r["confidence"],
-             "geometry":       r["geometry"],
-             "n_bands":        r["n_bands"],
-             "lat_lo":         r["lat_lo"],
-             "lat_hi":         r["lat_hi"]}
+             "confidence":     r["confidence"]}
             for r in df.iter_rows(named=True)]
 
 

@@ -10,6 +10,7 @@ new catalogue without any warning.
   python rebuild.py 3          from step 3 on (after fixing what stopped it)
   python rebuild.py --list     only list the steps
 
+Run it with the environment of requirements.txt (e.g. .venv\Scripts\python rebuild.py).
 Needs the keograms (KEO_DIR) and the driver table (FEATURES), see paths.py. The
 plots of the other analysis/ scripts are not part of it: no number depends on them.
 """
@@ -29,6 +30,7 @@ STEPS = [
     "paper/paper_numbers.py",                     # paper/numbers.json (reads the two csv above)
     "paper/validate_published.py",                #   + its published_roi section
     "paper/validate_hfint.py",                    #   + its hfint section
+    "paper/confidence_tiers.py",                  #   + its confidence_tiers section (lifts behind the tiers)
     "paper/method_checks.py",                     #   + its method_checks section
     "paper/make_figures.py",                      # figures (fig. 3 reads numbers.json)
 ]

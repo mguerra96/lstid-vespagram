@@ -75,15 +75,12 @@ def match(a, b):
 def trains_table(vespa):
     roi_tr = [{"method": "roi", "start": t["start_time"], "end": t["end_time"], "date": t["date"],
                "duration_h": t["duration_h"], "speed": t["speed_m_s"],
-               "period_min": t["period_s"] / 60, "n_members": t["n_fronts"],
-               "direction": None,             # the ROI speed is unsigned
-               "geometry": None, "amplitude": None}
+               "period_min": t["period_s"] / 60, "n_members": t["n_fronts"], "amplitude": None}
               for t in roi_trains()]
     ves_tr = [{"method": "vespa", "start": r["t_start"], "end": r["t_end"], "date": r["date"],
                "duration_h": (r["t_end"] - r["t_start"]).total_seconds() / 3600,
                "speed": r["speed_m_s"], "period_min": r["period_min"],
-               "n_members": r["n_bands"], "direction": r["direction"],
-               "geometry": r["geometry"], "amplitude": r["amplitude"]}
+               "n_members": r["n_detections"], "amplitude": r["amplitude"]}
               for r in vespa.iter_rows(named=True)]
 
     for tr, m, other in [(t, m, ves_tr) for t, m in zip(roi_tr, match(roi_tr, ves_tr))] +                         [(t, m, roi_tr) for t, m in zip(ves_tr, match(ves_tr, roi_tr))]:
@@ -108,13 +105,10 @@ def summary_figure(tr, path):
     ax = axs[0, 0]
     count = lambda df: [dict(df.group_by("year").len().iter_rows()).get(y, 0) for y in years]
     roi_n = count(tr.filter(pl.col("method") == "roi"))
-    eq_n  = count(tr.filter(pl.col("direction") == "equatorward"))
-    po_n  = count(tr.filter(pl.col("direction") == "poleward"))
+    ves_n = count(tr.filter(pl.col("method") == "vespa"))
     x = np.array(years)
     ax.bar(x - 0.2, roi_n, width=0.38, color=C_ROI, label="ROI-based")
-    ax.bar(x + 0.2, eq_n, width=0.38, color=C_VES, label="vespagram, equatorward")
-    ax.bar(x + 0.2, po_n, width=0.38, bottom=eq_n, color="white", edgecolor=C_VES,
-           hatch="///", label="vespagram, poleward")
+    ax.bar(x + 0.2, ves_n, width=0.38, color=C_VES, label="vespagram")
     ax.set_title("LSTID wave trains per year", loc="left")
     ax.legend(frameon=False)
 
@@ -274,10 +268,6 @@ def main(argv=None):
         s = tr.filter(pl.col("method") == m)
         print(f"{m:6s} trains: {s.height:5d}   matched: {s['matched'].mean() * 100:5.1f}%   "
               f"median duration {s['duration_h'].median():.1f} h")
-    ves = tr.filter(pl.col("method") == "vespa")
-    print(f"vespagram trains by direction: "
-          f"{dict(ves.group_by('direction').len().iter_rows())}")
-
     picks = pick_examples(tr, n=args.n)
     if args.days:
         picks["manual"] = [dt.date.fromisoformat(d) for d in args.days]

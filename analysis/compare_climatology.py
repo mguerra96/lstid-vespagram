@@ -217,15 +217,13 @@ def fig_month_hour(grid, ys, path, labels=METHODS):
 
 
 def fig_characteristics(trains, path):
-    # speed bins uniform in SLOWNESS, 3 vespagram grid steps wide and centred on the
-    # grid: the slowness grid is discrete, so equal-width speed bins show a comb
-    vc = vespagram.VespaConfig()
-    dp = 2 * vc.max_slowness / (vc.n_slowness - 1)
+    # speed bins uniform in SLOWNESS, 3 vespagram grid steps wide
+    dp = vespagram.VespaConfig().slowness_step
     p_edges = (np.arange(np.ceil(1 / 1500 / dp), np.floor(1 / 250 / dp) + 3, 3) - 0.5) * dp
     specs = [("speed_m_s", "Speed [m/s]", 1, np.sort(1 / p_edges)),
              ("period_s", "Period [min]", 1 / 60, np.arange(20, 210, 7.5)),
              ("peak_amplitude", "Amplitude [TECu]", 1, np.linspace(0, 0.3, 41)),
-             ("duration_h", "Train duration [h]", 1, np.arange(0, 12.25, 0.5))]
+             ("duration_h", "Train duration [h]", 1, np.arange(0, 24.5, 1.0))]
     fig, axes = plt.subplots(1, 4, figsize=(17, 4))
     for ax, (k, xl, sc, bins) in zip(axes, specs):
         for m, recs in trains.items():

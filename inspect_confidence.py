@@ -27,8 +27,7 @@ ROOT   = Path(__file__).parent
 TRAINS = ROOT / "results/vespagram/trains.parquet"
 OUT    = ROOT / "results/vespagram/confidence_check"
 
-# tier -> (label colour, rule, from the thresholds of vespagram.train_confidence;
-# a train slower than confidence_min_speed sits one tier lower than its score)
+# tier -> (label colour, rule, from the thresholds of vespagram.train_confidence)
 _C = v.VespaConfig()
 TIERS = {"high":   ("#a6d96a", f"score ≥ {_C.confidence_high:.2f}"),
          "medium": ("#fee08b", f"score {_C.confidence_medium:.2f}–{_C.confidence_high:.2f}"),
@@ -39,8 +38,7 @@ NCOL   = 3
 
 
 def draw_train(ax, tr, members, lats, cfg, boxed):
-    bands = [d for d in members if not d["is_full"]] or members
-    for d in bands:
+    for d in members:
         lo, hi = v._owned_slice(d, lats.min(), lats.max(), cfg)
         la = np.linspace(lo, hi, 8)
         dd = (la - d["lat_c"]) * v.M_PER_DEG
@@ -48,11 +46,11 @@ def draw_train(ax, tr, members, lats, cfg, boxed):
             ax.plot((tc - dd * d["slowness"]) / 3600, la, color="k", lw=1.1 if boxed else 0.8,
                     ls=ls, alpha=1 if boxed else 0.7)
     if boxed:
-        ax.add_patch(Rectangle((tr["t_start_s"] / 3600, tr["lat_lo"]),
-                               (tr["t_end_s"] - tr["t_start_s"]) / 3600, tr["lat_hi"] - tr["lat_lo"],
+        ax.add_patch(Rectangle((tr["t_start_s"] / 3600, lats.min()),
+                               (tr["t_end_s"] - tr["t_start_s"]) / 3600, lats.max() - lats.min(),
                                fill=False, ec="k", lw=1.6))
     tm = 0.5 * (tr["t_start_s"] + tr["t_end_s"]) / 3600
-    ax.text(tm, tr["lat_hi"] - 0.3,
+    ax.text(tm, lats.max() - 0.3,
             f"#{tr['train_id']} {tr['speed_m_s']:.0f} m/s · {tr['period_s'] / 60:.0f} min · "
             f"score {tr['confidence_score']:.2f}",
             fontsize=7, ha="center", va="top", clip_on=True,
@@ -75,8 +73,8 @@ def panel(ax, day, train_id):
     ax.set_xticks(np.arange(np.ceil(t0), t0 + 2 * HALF_H + 0.01, 2))
     ax.tick_params(labelsize=7)
     tr = trains[k]
-    ax.set_title(f"{day}  #{train_id}  {tr['geometry']}, {tr['n_bands']} bands"
-                 f"{' + full array' if tr['full_array'] else ''}", fontsize=8, loc="left")
+    ax.set_title(f"{day}  #{train_id}  semblance {tr['semblance']:.2f}, coverage {tr['coverage']:.2f}, "
+                 f"{tr['n_detections']} detections", fontsize=8, loc="left")
 
 
 def sheet(tier, rows, n_total, path):
