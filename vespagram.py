@@ -712,15 +712,22 @@ def _write_table(rows, folder, name):
     df.write_parquet(folder / f"{name}.parquet")
     lists = [c for c, t in df.schema.items() if isinstance(t, pl.List)]
     df.with_columns(pl.col(c).cast(pl.List(pl.String)).list.join(" ") for c in lists) \
-      .write_csv(folder / f"{name}.csv")
+      .write_csv(folder / f"{name}.csv", datetime_format="%Y-%m-%dT%H:%M:%S%.f")  # %.f: no zero fraction
 
 
 def write_release(folder):
-    """Copy the catalogue in `folder` to folder/release with the published columns."""
+    """Copy the catalogue in `folder` to folder/release with the published columns,
+    values rounded to 3 significant digits and times to whole seconds."""
     (folder / "release").mkdir(exist_ok=True)
     for name, cols in RELEASE_COLS.items():
-        _write_table(pl.read_parquet(folder / f"{name}.parquet").select(cols),
-                     folder / "release", name)
+        df = pl.read_parquet(folder / f"{name}.parquet").select(cols)
+        df = df.with_columns(pl.col(pl.Float64).fill_nan(None).round_sig_figs(3),
+                             pl.col(pl.Datetime).dt.round("1s"))
+        # speeds >= 300 m/s, periods >= 25 min, wavelengths: whole numbers once at 3 digits
+        df = df.with_columns(pl.col("^(speed|period|wavelength)_.*$").cast(pl.Int32),
+                             pl.col("^(crests|troughs)_s$").list.eval(
+                                 pl.element().round().cast(pl.Int32)))
+        _write_table(df, folder / "release", name)
 
 
 def parse_args(argv=None):
