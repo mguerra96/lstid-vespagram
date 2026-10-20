@@ -148,7 +148,19 @@ detector unchanged. About two thirds of the 0.02 TECu packets and nearly all tho
 - **Offline.** The band-pass is zero-phase and each day uses 12 h of the next day; an
   operational detector would need a causal version.
 
-## Licence and citation
+## How to cite
+
+The code is archived on Zenodo: [doi:10.5281/zenodo.23495935](https://doi.org/10.5281/zenodo.23495935).
+This DOI always resolves to the latest version; the Zenodo page also lists a DOI for
+each release, to cite the exact version you used (v1.0.0: 10.5281/zenodo.23495936).
+
+```
+Guerra, M. lstid-vespagram: LSTID catalogue from GNSS TEC keograms. Zenodo. https://doi.org/10.5281/zenodo.23495935
+```
+
+If you use the catalogue, please also cite the paper and the data record.
+
+## Licence
 
 Code: MIT licence, © 2026 Istituto Nazionale di Geofisica e Vulcanologia (INGV).
-Data: CC BY 4.0 (Zenodo record). Please cite the paper and the Zenodo record.
+Data: CC BY 4.0 (Zenodo record).

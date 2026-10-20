@@ -13,6 +13,11 @@ authors:
     given-names: Marco
     affiliation: "Istituto Nazionale di Geofisica e Vulcanologia (INGV)"
     orcid: "https://orcid.org/0000-0001-9993-2366"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23495935
+    description: "All versions (resolves to the latest release)"
+doi: 10.5281/zenodo.23495935
 repository-code: "https://github.com/mguerra96/lstid-vespagram"
 license: MIT
 version: 1.0.0
