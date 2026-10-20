@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+title: "lstid-vespagram: LSTID catalogue from GNSS TEC keograms"
+abstract: >-
+  lstid-vespagram detects equatorward large-scale travelling ionospheric
+  disturbances (LSTIDs) in daily GNSS TEC keograms over Europe (37.5–57.5°N,
+  2015–2025) with a vespagram (slant-stack) method from array seismology,
+  groups them into wave trains with a confidence score, and produces every
+  number and figure of the accompanying data descriptor.
+authors:
+  - family-names: Guerra
+    given-names: Marco
+    affiliation: "Istituto Nazionale di Geofisica e Vulcanologia (INGV)"
+    orcid: "https://orcid.org/0000-0001-9993-2366"
+repository-code: "https://github.com/mguerra96/lstid-vespagram"
+license: MIT
+version: 1.0.0
+date-released: "2026-10-20"
+keywords:
+  - LSTID
+  - travelling ionospheric disturbances
+  - GNSS
+  - total electron content
+  - keogram
+  - vespagram
+  - ionosphere

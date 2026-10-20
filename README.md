@@ -8,7 +8,7 @@ and figure of the paper.
 
 The catalogue itself (trains, detections, keograms and daily coverage) is on Zenodo:
 *DOI to be added*. The keograms are built from RINEX files by
-[pykeo](https://github.com/mguerra96/pykeo).
+[pykeo](https://github.com/mguerra96/pykeo) (doi:[10.5281/zenodo.23495716](https://doi.org/10.5281/zenodo.23495716)).
 
 ## Method in short
 
