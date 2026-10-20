@@ -6,8 +6,9 @@ submitted). It detects equatorward large-scale travelling ionospheric disturbanc
 (LSTIDs) in daily GNSS TEC keograms of 37.5–57.5°N, 2015–2025, and produces every number
 and figure of the paper.
 
-The catalogue itself (trains, detections, keograms and daily coverage) is on Zenodo:
-*DOI to be added*. The keograms are built from RINEX files by
+The catalogue itself (trains, detections, keograms, daily coverage, station list and
+driver table) is on Zenodo:
+doi:[10.5281/zenodo.23496051](https://doi.org/10.5281/zenodo.23496051). The keograms are built from RINEX files by
 [pykeo](https://github.com/mguerra96/pykeo) (doi:[10.5281/zenodo.23495716](https://doi.org/10.5281/zenodo.23495716)).
 
 ## Method in short
