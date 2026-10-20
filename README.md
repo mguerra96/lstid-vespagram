@@ -1,7 +1,6 @@
 # LSTID catalogue from GNSS TEC keograms over Europe
 
-Code of the paper *An eleven-year catalogue of large-scale travelling ionospheric
-disturbances from GNSS TEC over Europe* (Guerra, Cesaroni & Spogli, Scientific Data,
+Code of the paper *A solar-cycle catalogue of large-scale travelling ionospheric disturbances from GNSS TEC over Europe* (Guerra, Cesaroni & Spogli, Scientific Data,
 submitted). It detects equatorward large-scale travelling ionospheric disturbances
 (LSTIDs) in daily GNSS TEC keograms of 37.5–57.5°N, 2015–2025, and produces every number
 and figure of the paper.
